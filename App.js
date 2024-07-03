@@ -5,6 +5,7 @@ import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import { View, StyleSheet } from 'react-native';
 
 import {auth} from './services/firebaseconfig';
 
@@ -15,6 +16,10 @@ import LoginScreen from './src/screens/LoginScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+const CustomHeader = () => (
+    <View style={styles.customHeader} />
+);
 
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -30,6 +35,7 @@ const App = () => {
 
     return () => unsubscribe();
   }, []);
+
 
 
   return (
@@ -92,12 +98,22 @@ const App = () => {
               <Stack.Screen
                   name="Login"
                   component={LoginScreen}
-                  options={{headerShown: false}}
+                  options={{
+                    header: () => <CustomHeader />
+                  }}
               />
             </Stack.Navigator>
         )}
       </NavigationContainer>
   );
 };
+
+
+const styles = StyleSheet.create({
+  customHeader: {
+    height: 50,
+    backgroundColor: 'white',
+  },
+});
 
 export default App;
