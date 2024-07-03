@@ -1,11 +1,15 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import BackgroundImage from '../assets/Backgroundimage';
 
 const ChartScreen = () => {
     return (
-        <View style={styles.container}>
-            <Text style={styles.text}>Chart Screen</Text>
-        </View>
+        <>
+            <BackgroundImage />
+            <View style={styles.container}>
+                <Text style={styles.text}>Chart Screen</Text>
+            </View>
+        </>
     );
 };
 

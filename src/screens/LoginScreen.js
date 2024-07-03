@@ -20,7 +20,6 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import BackgroundImage from '../assets/Backgroundimage';
 
-const backgroundImageSource = require('../assets/background04.jpg');
 
 const LoginScreen = () => {
     const [email, setEmail] = useState('');

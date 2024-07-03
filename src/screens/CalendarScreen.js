@@ -1,11 +1,17 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
+import BackgroundImage from '../assets/Backgroundimage';
+
 const CalendarScreen = () => {
     return (
-        <View style={styles.container}>
-            <Text style={styles.text}>Calendar Screen</Text>
-        </View>
+        <>
+            <BackgroundImage />
+            <View style={styles.container}>
+                <Text style={styles.text}>Calendar Screen</Text>
+            </View>
+        </>
+
     );
 };
 
