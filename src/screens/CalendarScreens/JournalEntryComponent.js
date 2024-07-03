@@ -1,14 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
+import {View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity, Alert,} from 'react-native';
 import {auth, db} from '../../../services/firebaseconfig.js';
 import {collection, addDoc} from 'firebase/firestore';
 import {format} from 'date-fns';
@@ -144,13 +135,13 @@ const JournalEntryScreen = ({route, navigation, onClose}) => {
   };
 
   const handleSubmit = async () => {
-    if (moodValue === 0) {
-      Alert.alert('Error', 'Mood entry must be selected');
+    if (!currentUser) {
+      Alert.alert('Error', 'User information not available');
       return;
     }
 
-    if (!currentUser) {
-      Alert.alert('Error', 'User information not available');
+    if (moodValue === 0) {
+      Alert.alert('Error', 'Mood entry must be selected');
       return;
     }
 
@@ -158,13 +149,14 @@ const JournalEntryScreen = ({route, navigation, onClose}) => {
     console.log('Mood Value:', moodValue);
     console.log('Date:', date);
     console.log('Time:', currentTime);
+    console.log('UserID:', currentUser.uid);
 
     try {
-      const entryRef = collection(db, 'Entries');
+      const entryRef = collection(db, 'JournalEntries');
       await addDoc(entryRef, {
-        userEmail: currentUser.email,
-        date: date,
-        time: currentTime,
+        userID: currentUser.uid,
+        date: date.toString(),
+        time: currentTime.toString(),
         moodValue: moodValue,
         journal: journalText,
       });
