@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,6 +9,7 @@ import {
     ScrollView,
     KeyboardAvoidingView,
     Platform,
+    Alert,
 } from 'react-native';
 import {
     createUserWithEmailAndPassword,
@@ -20,17 +21,16 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import BackgroundImage from '../assets/Backgroundimage';
 
-
 const LoginScreen = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [user, setUser] = useState(null);
     const [isLogin, setIsLogin] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
-        // eslint-disable-next-line no-shadow
-        const unsubscribe = onAuthStateChanged(auth, user => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
             setUser(user);
         });
 
@@ -47,6 +47,12 @@ const LoginScreen = () => {
                     await signInWithEmailAndPassword(auth, email, password);
                     console.log('User signed in successfully!');
                 } else {
+                    // Check if passwords match
+                    if (password !== confirmPassword) {
+                        Alert.alert('Passwords do not match.');
+                        return;
+                    }
+
                     await createUserWithEmailAndPassword(auth, email, password);
                     console.log('User created successfully!');
                 }
@@ -56,12 +62,10 @@ const LoginScreen = () => {
         }
     };
 
-    // Function to toggle password visibility
     const togglePasswordVisibility = () => {
         setShowPassword(!showPassword);
     };
 
-    // Function to toggle between Login and Sign Up
     const toggleLogin = () => {
         setIsLogin(!isLogin);
     };
@@ -74,10 +78,15 @@ const LoginScreen = () => {
                 behavior={Platform.OS === 'ios' ? 'padding' : null}>
                 <ScrollView contentContainerStyle={styles.scrollViewContent}>
                     <View style={styles.innerContainer}>
-                        <Image source={require('../assets/mind.png')} style={styles.logo} />
+                        <Image
+                            source={require('../assets/mind.png')}
+                            style={styles.logo}
+                        />
                         <Text style={styles.appName}>Cranium Conscious</Text>
                         <View style={styles.loginContainer}>
-                            <Text style={styles.title}>{isLogin ? 'Login' : 'Sign Up'}</Text>
+                            <Text style={styles.title}>
+                                {isLogin ? 'Login' : 'Sign Up'}
+                            </Text>
                             <TextInput
                                 style={styles.input}
                                 value={email}
@@ -103,6 +112,15 @@ const LoginScreen = () => {
                                     />
                                 </TouchableOpacity>
                             </View>
+                            {!isLogin && (
+                                <TextInput
+                                    style={styles.input}
+                                    value={confirmPassword}
+                                    onChangeText={setConfirmPassword}
+                                    placeholder="Confirm Password"
+                                    secureTextEntry={!showPassword}
+                                />
+                            )}
                             <TouchableOpacity
                                 onPress={handleAuthentication}
                                 style={styles.button}>
@@ -112,7 +130,9 @@ const LoginScreen = () => {
                             </TouchableOpacity>
 
                             <View style={styles.bottomContainer}>
-                                <Text style={styles.toggleText} onPress={toggleLogin}>
+                                <Text
+                                    style={styles.toggleText}
+                                    onPress={toggleLogin}>
                                     {isLogin
                                         ? 'Need an account? Sign Up'
                                         : 'Already have an account? Sign In'}
@@ -129,6 +149,25 @@ const LoginScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        paddingBottom: 100,
+    },
+    logo: {
+        height: 150,
+        width: 250,
+        alignSelf: 'center',
+        justifyContent: 'center',
+        marginTop: 50,
+    },
+    appName: {
+        fontWeight: 'bold',
+        fontSize: 33,
+        color: 'black',
+        fontFamily: 'TimesNewRoman',
+        paddingBottom: 10,
+        paddingTop: 8,
+        textShadowColor: 'white',
+        textShadowOffset: { width: -1, height: -1 },
+        textShadowRadius: 5,
     },
     innerContainer: {
         flexDirection: 'column',
@@ -161,7 +200,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         elevation: 3,
         shadowColor: '#000',
-        shadowOffset: {width: 0, height: 2},
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 3,
     },
@@ -183,11 +222,14 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 20,
+        paddingHorizontal: 20,
         backgroundColor: '#fff',
+        borderColor: '#ccc',
+        borderWidth: 1,
         borderRadius: 10,
         elevation: 3,
         shadowColor: '#000',
-        shadowOffset: {width: 0, height: 2},
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 3,
     },
@@ -206,29 +248,6 @@ const styles = StyleSheet.create({
     },
     bottomContainer: {
         marginTop: 20,
-    },
-    backgroundImage: {
-        position: 'absolute',
-        width: '100%',
-        height: '100%',
-    },
-    logo: {
-        height: 150,
-        width: 250,
-        alignSelf: 'center',
-        justifyContent: 'center',
-        marginTop: 50,
-    },
-    appName: {
-        fontWeight: 'bold',
-        fontSize: 33,
-        color: 'black',
-        fontFamily: 'TimesNewRoman',
-        paddingBottom: 1,
-        paddingTop: 8,
-        textShadowColor: 'white',
-        textShadowOffset: {width: -1, height: -1},
-        textShadowRadius: 5,
     },
 });
 
