@@ -37,7 +37,9 @@ const CalendarComponent = () => {
   const JournalEntryModalContent = ({date, onClose}) => (
     <View style={styles.modalContainer}>
       <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-        <Text style={styles.closeButtonText}>X</Text>
+          <MaterialCommunityIcons
+            name="close-circle-outline"
+            size={50}/>
       </TouchableOpacity>
       <JournalEntryScreen route={{ params: { date } }} onClose={onClose} />
     </View>
@@ -122,14 +124,10 @@ const styles = StyleSheet.create({
   closeButton: {
     position: 'absolute',
     top: 15,
-    left: 20,
+    left: 10,
     padding: 10,
     borderRadius: 20,
-    borderColor: 'black',
-    borderWidth: 2,
     zIndex: 1,
-    width: 40,
-    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
