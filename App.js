@@ -10,12 +10,14 @@ import { View, StyleSheet } from 'react-native';
 import {auth} from './services/firebaseconfig';
 
 import HomeScreen from './src/screens/HomeScreen';
-import CalendarScreen from './src/screens/CalendarScreen';
+import CalendarComponent from './src/screens/CalendarScreens/CalendarComponent';
 import ChartScreen from './src/screens/CharScreen';
 import LoginScreen from './src/screens/LoginScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+const headerImageSource = require('./src/assets/headerlogo.png');
 
 const CustomHeader = () => (
     <View style={styles.customHeader} />
@@ -32,10 +34,8 @@ const App = () => {
         setIsLoggedIn(false);
       }
     });
-
     return () => unsubscribe();
   }, []);
-
 
 
   return (
@@ -68,7 +68,7 @@ const App = () => {
               />
               <Tab.Screen
                   name="Calendar"
-                  component={CalendarScreen}
+                  component={CalendarComponent}
                   options={{
                     headerShown: true,
                     header: () => <CustomHeader />,

@@ -1,10 +1,19 @@
 import React, {useEffect, useState} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Image, StyleSheet, Text, View} from 'react-native';
 import {auth} from '../../services/firebaseconfig';
 import BackgroundImage from "../assets/Backgroundimage";
+import headerImageSource from "../assets/headerlogo.png";
 
 const backgroundImageSource = require('../assets/background04.jpg');
 
+const HeaderWithLogo = () => (
+    <View style={styles.headerLogoContainer}>
+        <Image
+            style={styles.logoImageContainer}
+            source={headerImageSource}
+        />
+    </View>
+);
 const HomeScreen = ({navigation}) => {
     const [currentUser, setCurrentUser] = useState(null);
 
@@ -33,8 +42,8 @@ const HomeScreen = ({navigation}) => {
     return (
         <>
             <BackgroundImage />
+            <HeaderWithLogo/>
             <View style={styles.container}>
-                {/*<Button title="HOME" onPress={() => navigation.navigate('About')} />*/}
                 {currentUser && (
                     <Text style={styles.welcomeText}>
                         Welcome, {getUsernameFromEmail(currentUser.email).toLowerCase()}!
@@ -43,7 +52,7 @@ const HomeScreen = ({navigation}) => {
             </View>
 
             <View style={styles.chartContainer}>
-                <Text> Chart </Text>
+                <Text style={styles.chartText}>Chart</Text>
             </View>
         </>
     );
@@ -51,17 +60,19 @@ const HomeScreen = ({navigation}) => {
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        backgroundColor: 'white',
         width: '90%',
         alignSelf: 'center',
         borderRadius: 10,
-        marginTop: 40,
+        marginTop: 20,
     },
     chartContainer:{
-        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        backgroundColor: 'white',
         width: '90%',
         height: '50%',
         alignSelf: 'center',
+        justifyContent: 'center',
+        alignItems: 'center',
         borderRadius: 10,
         marginTop: 40,
     },
@@ -73,6 +84,21 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         paddingBottom: 20,
     },
+    chartText: {
+        fontWeight: 'bold',
+        fontSize: 25,
+    },
+    headerLogoContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingTop: 10,
+        paddingLeft: 10,
+    },
+    logoImageContainer: {
+        width: 125,
+        height: 50,
+        resizeMode: 'stretch',
+    }
 });
 
 export default HomeScreen;
