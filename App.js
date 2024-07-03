@@ -54,6 +54,8 @@ const App = () => {
                   name="Home"
                   component={HomeScreen}
                   options={{
+                    headerShown: true,
+                    header: () => <CustomHeader/>,
                     tabBarLabel: 'Home',
                     tabBarIcon: ({color, size, focused}) => (
                         <MaterialCommunityIcons
@@ -68,6 +70,8 @@ const App = () => {
                   name="Calendar"
                   component={CalendarScreen}
                   options={{
+                    headerShown: true,
+                    header: () => <CustomHeader />,
                     tabBarLabel: 'Calendar',
                     tabBarIcon: ({color, size, focused}) => (
                         <MaterialCommunityIcons
@@ -82,6 +86,8 @@ const App = () => {
                   name="ChartScreen"
                   component={ChartScreen}
                   options={{
+                    headerShown: true,
+                    header: () => <CustomHeader />,
                     tabBarLabel: 'Mood Graph',
                     tabBarIcon: ({color, size, focused}) => (
                         <MaterialCommunityIcons
