@@ -1,10 +1,18 @@
 import React, {useEffect, useState} from 'react';
-import {Image, StyleSheet, Text, View} from 'react-native';
+import {Dimensions, Image, StyleSheet, Text, View} from 'react-native';
 import {auth} from '../../services/firebaseconfig';
 import BackgroundImage from "../assets/Backgroundimage";
 import headerImageSource from "../assets/headerlogo.png";
+import {
+    LineChart,
+    BarChart,
+    PieChart,
+    ProgressChart,
+    ContributionGraph,
+    StackedBarChart
+} from 'react-native-chart-kit'
 
-const backgroundImageSource = require('../assets/background04.jpg');
+const screenWidth = Dimensions.get('window').width;
 
 const HeaderWithLogo = () => (
     <View style={styles.headerLogoContainer}>
@@ -14,7 +22,29 @@ const HeaderWithLogo = () => (
         />
     </View>
 );
+
+const linedata = {
+    labels: ['Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat', 'Sun'],
+    datasets: [
+        {
+            data: [4, 2, 4, 1, 2, 4, 5],
+            strokeWidth: 5,
+        },
+    ],
+};
+
+const barData = {
+    labels: ['January', 'February', 'March', 'April', 'May', 'June'],
+    datasets: [
+        {
+            data: [20, 45, 28, 80, 99, 43],
+        },
+    ],
+};
+
 const HomeScreen = ({navigation}) => {
+
+
     const [currentUser, setCurrentUser] = useState(null);
 
     useEffect(() => {
@@ -39,6 +69,7 @@ const HomeScreen = ({navigation}) => {
         return '';
     };
 
+
     return (
         <>
             <BackgroundImage />
@@ -51,8 +82,56 @@ const HomeScreen = ({navigation}) => {
                 )}
             </View>
 
+
             <View style={styles.chartContainer}>
-                <Text style={styles.chartText}>Chart</Text>
+                <Text style={styles.chartText}>
+                    Weekly Mood Tracker
+                </Text>
+
+                <LineChart
+                    data={linedata}
+                    width={Dimensions.get('window').width} // from react-native
+                    height={220}
+                    yAxisLabel={''}
+                    chartConfig={{
+                        backgroundColor: '#27AE60',
+                        backgroundGradientFrom: '#27AE60',
+                        backgroundGradientTo: '#27AE60',
+                        decimalPlaces: 2, // optional, defaults to 2dp
+                        color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                        style: {
+                            borderRadius: 16
+                        }
+                    }}
+                    bezier
+                    style={{
+                        marginVertical: 8,
+                        borderRadius: 16
+                    }}
+                />
+            </View>
+
+            <View style={styles.chartContainer2}>
+                <Text style={styles.chartText}>
+                    Journal Streak
+                </Text>
+                <BarChart
+                    // style={graphStyle}
+                    data={barData}
+                    width={screenWidth}
+                    height={220}
+                    yAxisLabel={''}
+                    chartConfig={{
+                        backgroundColor: '#A569BD',
+                        backgroundGradientFrom: '#A569BD',
+                        backgroundGradientTo: '#A569BD',
+                        decimalPlaces: 2, // optional, defaults to 2dp
+                        color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                        style: {
+                            borderRadius: 16
+                        }
+                    }}
+                />
             </View>
         </>
     );
@@ -60,20 +139,32 @@ const HomeScreen = ({navigation}) => {
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: 'white',
-        width: '90%',
+        backgroundColor:'#5499C7',
+        width: '75%',
         alignSelf: 'center',
-        borderRadius: 10,
         marginTop: 20,
+        borderRadius: 40,
+
     },
+
     chartContainer:{
-        backgroundColor: 'white',
-        width: '90%',
-        height: '50%',
+        backgroundColor: '#27AE60',
+        width: '100%',
+        height: 'auto',
         alignSelf: 'center',
         justifyContent: 'center',
         alignItems: 'center',
-        borderRadius: 10,
+        borderRadius: 40,
+        marginTop: 40,
+    },
+    chartContainer2:{
+        backgroundColor: '#A569BD',
+        width: '100%',
+        height: 'auto',
+        alignSelf: 'center',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 40,
         marginTop: 40,
     },
     welcomeText: {
@@ -85,8 +176,8 @@ const styles = StyleSheet.create({
         paddingBottom: 20,
     },
     chartText: {
-        fontWeight: 'bold',
-        fontSize: 25,
+        fontSize: 20,
+        color: 'white',
     },
     headerLogoContainer: {
         flexDirection: 'row',
