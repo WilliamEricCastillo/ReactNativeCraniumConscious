@@ -11,13 +11,13 @@ import {auth} from './services/firebaseconfig';
 
 import HomeScreen from './src/screens/HomeScreen';
 import CalendarComponent from './src/screens/CalendarScreens/CalendarComponent';
-import ChartScreen from './src/screens/CharScreen';
+import ChartScreen from './src/screens/ChartScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import LogoutScreen from './src/screens/LogoutScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const headerImageSource = require('./src/assets/headerlogo.png');
 
 const CustomHeader = () => (
     <View style={styles.customHeader} />
@@ -83,15 +83,30 @@ const App = () => {
                   }}
               />
               <Tab.Screen
-                  name="ChartScreen"
+                  name="Mood Tracker"
                   component={ChartScreen}
                   options={{
                     headerShown: true,
-                    header: () => <CustomHeader />,
-                    tabBarLabel: 'Mood Graph',
+                    tabBarLabel: 'Graphs',
                     tabBarIcon: ({color, size, focused}) => (
                         <MaterialCommunityIcons
-                            name="chart-box-outline"
+                            name="chart-line"
+                            color={focused ? 'white' : 'black'}
+                            size={size}
+                        />
+                    ),
+                  }}
+              />
+              <Tab.Screen
+                  name="Logout"
+                  component={LogoutScreen}
+                  options={{
+                    headerShown: true,
+                    header: () => <CustomHeader />,
+                    tabBarLabel: 'Logout',
+                    tabBarIcon: ({color, size, focused}) => (
+                        <MaterialCommunityIcons
+                            name="logout"
                             color={focused ? 'white' : 'black'}
                             size={size}
                         />
