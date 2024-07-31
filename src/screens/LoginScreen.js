@@ -236,7 +236,6 @@ const styles = StyleSheet.create({
     passwordInput: {
         flex: 1,
         height: 50,
-        paddingHorizontal: 20,
     },
     toggleButton: {
         padding: 15,
