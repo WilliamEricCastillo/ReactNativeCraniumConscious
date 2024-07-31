@@ -4,8 +4,10 @@ import BackgroundImage from "../assets/Backgroundimage";
 import { BarChart, LineChart, PieChart, PopulationPyramid } from "react-native-gifted-charts";
 import {LinearGradient, Stop} from "react-native-svg";
 
+import PieChartComponent from "../screens/GraphComponents/PieChartComponent"
+
 const screenWidth = Dimensions.get('window').width;
-// const chartWidth = screenWidth * 0.95;
+const chartWidth = screenWidth * 0.95;
 
 const ChartScreen = () => {
     const lineData = [
@@ -17,6 +19,29 @@ const ChartScreen = () => {
         {value: 4, dataPointText: '😊', label: 'Sat'},
         {value: 5, dataPointText: '😍', label: 'Sun'},
     ];
+
+    const barData = [
+        {value: 250, label: 'M'},
+        {value: 500, label: 'T', frontColor: '#177AD5'},
+        {value: 745, label: 'W', frontColor: '#177AD5'},
+        {value: 320, label: 'T'},
+        {value: 600, label: 'F', frontColor: '#177AD5'},
+        {value: 256, label: 'S'},
+        {value: 300, label: 'S'},
+    ];
+
+    const pieData = [
+        {
+            value: 47,
+            color: '#009FFF',
+            gradientCenterColor: '#006DFF',
+            focused: true,
+        },
+        {value: 40, color: '#93FCF8', gradientCenterColor: '#3BE9DE'},
+        {value: 16, color: '#BDB2FA', gradientCenterColor: '#8F80F3'},
+        {value: 3, color: '#FFA5BA', gradientCenterColor: '#FF7F97'},
+    ];
+
     return (
         <>
             <BackgroundImage/>
@@ -60,7 +85,40 @@ const ChartScreen = () => {
                             />
                         </View>
                     </View>
-                </View>
+
+                    <View style={styles.chartContainer2}>
+                        <View style={styles.centeredChart2}>
+                            <Text style={styles.chartText2}>Yearly Journal Entries</Text>
+                            <BarChart
+                                barWidth={22}
+                                noOfSections={3}
+                                barBorderRadius={4}
+                                frontColor="#ED6665"
+                                data={barData}
+                                yAxisThickness={0}
+                                showReferenceLine1
+                                referenceLine1Config={{
+                                    color: 'gray',
+                                    dashWidth: 2,
+                                    dashGap: 3,
+                                }}
+                                xAxisLabelTextStyle={{color:'black'}}
+                                yAxisTextStyle={{color: 'black'}}
+                                isAnimated
+                                xAxisColor={'black'}
+                                rulesColor={'black'}
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.chartContainer}>
+                        <View style={styles.centeredChart}>
+                            <Text style={styles.chartText}>Yearly Journal Entries</Text>
+                    <PieChartComponent/>
+                        </View>
+                    </View>
+
+                    </View>
             </ScrollView>
         </>
     );
@@ -68,15 +126,22 @@ const ChartScreen = () => {
 
 const styles = StyleSheet.create({
     container: {
+        flexDirection: "column",
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
     },
     chartContainer: {
         marginTop: 25,
-        marginBottom: 25,
+        marginBottom: 10,
+        paddingTop:10,
+        paddingBottom: 10,
+        paddingRight: 10,
+        paddingLeft: 10,
+        width: chartWidth,
+        borderRadius: 20,
         alignSelf: 'center',
-        borderRadius: 10,
+        backgroundColor: "#34448B",
     },
     chartText: {
         fontSize: 20,
@@ -87,7 +152,35 @@ const styles = StyleSheet.create({
     },
     centeredChart: {
         color: 'white',
-        backgroundColor: '#1a3461',
+        backgroundColor: '#232B5D',
+        borderRadius: 20,
+        paddingBottom: 25,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 5,
+    },
+    chartContainer2: {
+        marginTop: 25,
+        marginBottom: 10,
+        paddingTop:10,
+        paddingBottom: 10,
+        paddingRight: 10,
+        paddingLeft: 10,
+        width: chartWidth,
+        borderRadius: 20,
+        alignSelf: 'center',
+        backgroundColor: "#c65102",
+    },
+    chartText2: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: 'black',
+        paddingVertical: 10,
+        textAlign: 'center',
+    },
+    centeredChart2: {
+        color: 'white',
+        backgroundColor: '#008080',
         borderRadius: 20,
         paddingBottom: 25,
         alignItems: 'center',
