@@ -22,6 +22,7 @@ The bottom bar has five items: **Today**, **Journal**, a purple **+**, **Insight
 
 ```
 Today (opens first)
+ +-- "A pattern we're noticing" -> Shortest trustworthy pattern in your recent logs, or "Keep logging"
  +-- Check-in card ---------------> Check-in (mood, energy, stress, focus)
  +-- Log today cards -------------> Water / Sleep / Exercise / Meals / your own metrics
  +-- "Choose what appears here" --> My metrics
@@ -56,7 +57,7 @@ Day (any date): Previous / Next day, journal entries, daily metrics (tap to add 
 
 | Screen | How to open it | What it does |
 |---|---|---|
-| Today | Tab "Today" | Your day at a glance: check-in, tracked metrics, today's journal, and the last 7 days. |
+| Today | Tab "Today" | Your day at a glance: check-in, tracked metrics, today's journal, and a brief pattern card from your recent logs when enough data is available. |
 | Journal | Tab "Journal" | Write entries, browse prompts, search and filter entries, or switch to a calendar. |
 | Add to Today | Purple **+** | One menu for everything you can log. Back returns to the tab you were on. |
 | Insights | Tab "Insights" | Trends, a summary and mood factors calculated from your logs. |
@@ -98,6 +99,7 @@ After you tap Save the screen closes and you return to where you were. Cancel cl
 |---|---|---|
 | Insights | Tab "Insights" | Pick Week (7 days), Month (30), 3 Months (90) or Year (365). Shows days logged, journal entries, average mood and a card per metric that has data. |
 | Trend | Tap a trend card | Larger chart, average, lowest and highest, whether the trend is up, down or steady (needs at least 4 logged days), and the days you logged. Tap a day to open it. |
+| Personalized patterns | Insights | After at least 28 days and enough matched observations, the app can show brief, preliminary pattern cards such as sleep vs. mood or stress vs. focus. If the data is sparse, inconsistent or weak, it suppresses the claim and shows honest guidance instead. |
 | Mood factors / Factor | Insights > "View all" or a factor row | Compares your average mood on days with and without exercise, 7+ hours of sleep, 8+ glasses of water, 3+ meals, or high stress (4-5). Appears only when there are at least 3 days of each. |
 
 ### You screens

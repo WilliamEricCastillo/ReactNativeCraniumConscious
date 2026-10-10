@@ -15,18 +15,23 @@ import {
 } from '../../../services/data/dataService';
 import {greeting, todayISO, shiftISODate} from '../../utils/dates';
 import {formatWater, describeCustomEntries} from '../../utils/format';
+import {buildDays, patternInsightsForDays} from '../../utils/analytics';
 import {colors, metricColors, moodOptions, radius, space} from '../../theme/theme';
 import {ROUTES} from '../../navigation/routes';
 
 const loadToday = async () => {
   const today = todayISO();
-  const [snapshot, preferences, customMetrics, activeDates] = await Promise.all([
+  const [snapshot, preferences, customMetrics, activeDates, rangeData] = await Promise.all([
     getDaySnapshot(today),
     getPreferences(),
     listCustomMetrics(),
     listActiveDates({from: shiftISODate(today, -6), to: today}),
+    (async () => {
+      const {getRangeData} = await import('../../../services/data/dataService');
+      return getRangeData({from: shiftISODate(today, -27), to: today});
+    })(),
   ]);
-  return {today, snapshot, preferences, customMetrics, activeDates};
+  return {today, snapshot, preferences, customMetrics, activeDates, rangeData};
 };
 
 const MetricCard = ({icon, color, label, value, onPress}) => (
@@ -67,6 +72,8 @@ const TodayScreen = ({navigation}) => {
       })
     : [];
 
+  const patternDays = data?.rangeData ? buildDays(data.rangeData, shiftISODate(data.today, -27), data.today) : [];
+  const recentPattern = patternInsightsForDays(patternDays)[0] ?? null;
   const customEntries = metricId => (snapshot?.customEntries ?? []).filter(e => e.metricId === metricId);
 
   return (
@@ -85,6 +92,24 @@ const TodayScreen = ({navigation}) => {
       </LinearGradient>
 
       {error ? <Note>Could not read saved data on this device. Nothing has been removed.</Note> : null}
+
+      {data && patternDays.length > 0 ? (
+        <Card accent={colors.primary} style={{marginBottom: space.md}}>
+          <Text style={styles.cardTitle}>A pattern we're noticing</Text>
+          {recentPattern ? (
+            <>
+              <Text style={[styles.metricLabel, {marginTop: space.xs}]}>{recentPattern.observation}</Text>
+              <Text style={[styles.metricLabel, {marginTop: space.xs}]}>Range: {recentPattern.rangeLabel}</Text>
+              <Text style={[styles.metricLabel, {marginTop: space.xs}]}>Valid observations: {recentPattern.validObservations}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.metricLabel, {marginTop: space.xs}]}>Keep logging — your recent notes are still building a reliable pattern.</Text>
+              <Text style={[styles.metricLabel, {marginTop: space.xs}]}>The app shows these when there are enough matched days and actual values.</Text>
+            </>
+          )}
+        </Card>
+      ) : null}
 
       <Card onPress={go(ROUTES.checkIn)} accessibilityLabel="Check-in">
         <View style={styles.checkRow}>

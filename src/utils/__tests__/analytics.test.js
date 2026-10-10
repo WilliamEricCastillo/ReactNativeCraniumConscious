@@ -10,6 +10,7 @@ import {
   computeStreak,
   weekStartDate,
   goalProgress,
+  patternInsightsForDays,
 } from '../analytics';
 
 const checkIn = (date, values) => ({date, mood: null, energy: null, stress: null, focus: null, ...values});
@@ -151,5 +152,50 @@ describe('goal progress', () => {
   test('is honest about empty weeks and unsupported goals', () => {
     expect(goalProgress('Lower daily stress', buildDays({}, '2026-01-05', '2026-01-07')).text).toBe('Nothing logged yet this week.');
     expect(goalProgress('Learn Spanish', week)).toMatchObject({supported: false});
+  });
+});
+
+describe('pattern discovery', () => {
+  test('suppresses relationship claims when there is not enough trustworthy data', () => {
+    const sparse = buildDays(
+      {
+        checkIns: [checkIn('2026-01-01', {mood: 3, sleep: 8}), checkIn('2026-01-02', {mood: 2, sleep: 5})],
+        metricEntries: [entry('2026-01-01', 'sleep', 8), entry('2026-01-02', 'sleep', 5)],
+      },
+      '2026-01-01',
+      '2026-01-06',
+    );
+
+    expect(patternInsightsForDays(sparse)).toEqual([]);
+  });
+
+  test('detects a clear pattern in a synthetic 28-day dataset', () => {
+    const dates = eachDate('2026-02-01', '2026-02-28');
+    const checkIns = dates.map((date, index) => {
+      const mood = index < 14 ? 5 : 2;
+      return checkIn(date, {mood, stress: 2, focus: 4});
+    });
+    const metricEntries = dates.map((date, index) => entry(date, 'sleep', index < 14 ? 8 : 5));
+    const days = buildDays({checkIns, metricEntries}, '2026-02-01', '2026-02-28');
+
+    const insights = patternInsightsForDays(days);
+    expect(insights.some(i => i.id === 'sleep-mood')).toBe(true);
+    expect(insights[0]).toMatchObject({
+      validObservations: expect.any(Number),
+      observation: expect.stringContaining('sleep'),
+    });
+  });
+
+  test('handles missing values and date boundaries without inventing patterns', () => {
+    const dates = eachDate('2026-03-01', '2026-03-30');
+    const checkIns = dates.map((date, index) => {
+      const sleep = index % 3 === 0 ? null : 7 + (index % 2);
+      const mood = index % 4 === 0 ? null : 3;
+      return checkIn(date, {mood, sleep, stress: index % 5 === 0 ? 5 : 2, focus: 3});
+    });
+    const days = buildDays({checkIns}, '2026-03-01', '2026-03-30');
+
+    const insights = patternInsightsForDays(days);
+    expect(insights).toEqual([]);
   });
 });

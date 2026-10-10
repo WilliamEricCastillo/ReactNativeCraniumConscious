@@ -149,6 +149,148 @@ export const compareMoodByFactor = days => {
   });
 };
 
+const compareOutcomeByCondition = ({
+  days,
+  id,
+  title,
+  metricId,
+  outcomeMetric,
+  positiveCondition,
+  positiveLabel,
+  negativeLabel,
+  outcomeLabel,
+  nextDay = false,
+}) => {
+  if (days.length < 28) return null;
+
+  const pairs = nextDay
+    ? days.slice(0, -1).map((day, index) => ({base: day, next: days[index + 1]}))
+    : days.map(day => ({base: day, next: day}));
+
+  const valid = pairs.filter(({base, next}) => {
+    const primary = nextDay ? base[metricId] : base[metricId];
+    const outcome = nextDay ? next[outcomeMetric] : base[outcomeMetric];
+    return primary != null && outcome != null;
+  });
+
+  if (valid.length < 20) return null;
+
+  const withGroup = valid.filter(({base}) => positiveCondition(base));
+  const withoutGroup = valid.filter(({base}) => !positiveCondition(base));
+  if (withGroup.length < 10 || withoutGroup.length < 10) return null;
+
+  const withAvg = average((nextDay ? withGroup.map(({next}) => next[outcomeMetric]) : withGroup.map(({base}) => base[outcomeMetric])));
+  const withoutAvg = average((nextDay ? withoutGroup.map(({next}) => next[outcomeMetric]) : withoutGroup.map(({base}) => base[outcomeMetric])));
+
+  if (withAvg == null || withoutAvg == null) return null;
+
+  const diff = round1(withAvg - withoutAvg);
+  if (Math.abs(diff) < 0.5) return null;
+
+  if (days.length >= 42) {
+    const mid = Math.floor(days.length / 2);
+    const frontDays = days.slice(0, mid);
+    const backDays = days.slice(mid);
+    const front = compareOutcomeByCondition({
+      days: frontDays,
+      id: `${id}-front`,
+      title,
+      metricId,
+      outcomeMetric,
+      positiveCondition,
+      positiveLabel,
+      negativeLabel,
+      outcomeLabel,
+      nextDay,
+    });
+    const back = compareOutcomeByCondition({
+      days: backDays,
+      id: `${id}-back`,
+      title,
+      metricId,
+      outcomeMetric,
+      positiveCondition,
+      positiveLabel,
+      negativeLabel,
+      outcomeLabel,
+      nextDay,
+    });
+
+    if (!front || !back || Math.sign(front.diff) !== Math.sign(back.diff)) return null;
+  }
+
+  const direction = diff > 0 ? 'higher' : 'lower';
+  const observation = nextDay
+    ? `${outcomeLabel} tended to be ${direction} on the day after ${positiveLabel}.`
+    : `${outcomeLabel} tended to be ${direction} on days when ${positiveLabel}.`;
+
+  return {
+    id,
+    title,
+    validObservations: valid.length,
+    rangeLabel: `${days[0].date} to ${days[days.length - 1].date}`,
+    observation,
+    explanation: `${outcomeLabel} averaged ${round1(withAvg)} on ${positiveLabel} (${withGroup.length} days) and ${round1(withoutAvg)} on ${negativeLabel} (${withoutGroup.length} days).`,
+    comparison: `Compared ${positiveLabel} against ${negativeLabel}.`,
+    caution: 'This is a preliminary association in your own records and does not prove causation.',
+    diff,
+  };
+};
+
+export const patternInsightsForDays = days => {
+  if (!days || days.length === 0) return [];
+
+  const patterns = [
+    compareOutcomeByCondition({
+      days,
+      id: 'sleep-mood',
+      title: 'Sleep and mood',
+      metricId: 'sleep',
+      outcomeMetric: 'mood',
+      positiveCondition: d => d.sleep != null && d.sleep >= SLEEP_TARGET_HOURS,
+      positiveLabel: 'you logged 7+ hours of sleep',
+      negativeLabel: 'days under 7 hours of sleep',
+      outcomeLabel: 'Mood ratings',
+    }),
+    compareOutcomeByCondition({
+      days,
+      id: 'stress-focus',
+      title: 'Stress and focus',
+      metricId: 'stress',
+      outcomeMetric: 'focus',
+      positiveCondition: d => d.stress != null && d.stress >= HIGH_STRESS_MIN,
+      positiveLabel: 'you reported higher stress',
+      negativeLabel: 'days with lower stress',
+      outcomeLabel: 'Focus ratings',
+    }),
+    compareOutcomeByCondition({
+      days,
+      id: 'exercise-mood',
+      title: 'Exercise and mood',
+      metricId: 'exercise',
+      outcomeMetric: 'mood',
+      positiveCondition: d => d.exercise != null && d.exercise > 0,
+      positiveLabel: 'you logged exercise',
+      negativeLabel: 'days without logged exercise',
+      outcomeLabel: 'Mood ratings',
+    }),
+    compareOutcomeByCondition({
+      days,
+      id: 'sleep-next-mood',
+      title: 'Sleep-to-mood pattern',
+      metricId: 'sleep',
+      outcomeMetric: 'mood',
+      positiveCondition: d => d.sleep != null && d.sleep >= SLEEP_TARGET_HOURS,
+      positiveLabel: 'you slept 7+ hours the night before',
+      negativeLabel: 'nights under 7 hours before the day',
+      outcomeLabel: 'Mood ratings',
+      nextDay: true,
+    }),
+  ].filter(Boolean);
+
+  return patterns.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+};
+
 // Consecutive days with any record, ending today (or yesterday if today has nothing yet).
 export const computeStreak = (activeDates, today) => {
   const set = new Set(activeDates);

@@ -5,7 +5,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Screen, Title, Card, Chip, SectionTitle, MiniBars, Note, ListRow, EmptyState} from '../../components/ui';
 import useRangeDays from '../../hooks/useRangeDays';
 import {METRIC_INFO, TREND_METRICS} from '../../data/metrics';
-import {RANGES, seriesFor, bucketize, summarize, trendOf, compareMoodByFactor, factorSentence} from '../../utils/analytics';
+import {RANGES, seriesFor, bucketize, summarize, trendOf, compareMoodByFactor, factorSentence, patternInsightsForDays} from '../../utils/analytics';
 import {colors, space} from '../../theme/theme';
 import {ROUTES} from '../../navigation/routes';
 
@@ -21,13 +21,17 @@ const InsightsScreen = ({navigation}) => {
   const entries = days.reduce((n, d) => n + d.journalCount, 0);
   const moodSummary = summarize(seriesFor(days, 'mood'));
   const factors = compareMoodByFactor(days);
-  const ready = factors.filter(f => f.enough).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  const hasPersonalizedEvidence = days.length >= 28;
+  const ready = hasPersonalizedEvidence
+    ? factors.filter(f => f.enough).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
+    : [];
   const key = ready.find(f => Math.abs(f.diff) >= 0.5);
 
   const trends = TREND_METRICS.map(id => {
     const points = seriesFor(days, id);
     return {id, info: METRIC_INFO[id], points, summary: summarize(points), trend: trendOf(points)};
   }).filter(t => t.summary);
+  const patterns = patternInsightsForDays(days);
 
   return (
     <Screen tab>
@@ -61,6 +65,54 @@ const InsightsScreen = ({navigation}) => {
               <Stat value={moodSummary ? `${moodSummary.average}` : '-'} label="average mood" />
             </View>
           </Card>
+
+          {days.length >= 28 ? (
+            <>
+              <SectionTitle title="Personalized patterns" />
+              {patterns.length === 0 ? (
+                <Note>
+                  You have enough days logged to look for patterns, but your current records do not show a reliable relationship yet.
+                </Note>
+              ) : (
+                patterns.slice(0, 2).map(pattern => (
+                  <Card key={pattern.id} accent={colors.primary}>
+                    <Text style={styles.cardTitle}>{pattern.title}</Text>
+                    <Text style={[styles.muted, {marginTop: space.sm}]}>{pattern.observation}</Text>
+                    <Text style={styles.muted}>Range: {pattern.rangeLabel}</Text>
+                    <Text style={styles.muted}>Valid observations: {pattern.validObservations}</Text>
+                    <Text style={styles.muted}>Comparison: {pattern.comparison}</Text>
+                    <Text style={styles.muted}>Limit: {pattern.caution}</Text>
+                  </Card>
+                ))
+              )}
+            </>
+          ) : (
+            <Note>
+              Personalized relationship insights appear after at least 28 days and enough matched data points.
+            </Note>
+          )}
+
+          <SectionTitle
+            title="What affects your mood"
+            action="View all"
+            onAction={() => navigation.navigate(ROUTES.moodFactors, {range})}
+          />
+          {ready.length === 0 ? (
+            <Note>
+              Factors appear once you have at least 28 days logged and at least 3 days with and 3 days without a factor in this range.
+            </Note>
+          ) : (
+            ready.slice(0, 3).map(f => (
+              <ListRow
+                key={f.id}
+                title={f.title}
+                subtitle={`Mood ${f.withAvg} with vs ${f.withoutAvg} without`}
+                icon={f.icon}
+                color={f.diff >= 0 ? colors.green : colors.red}
+                onPress={() => navigation.navigate(ROUTES.factor, {factorId: f.id, range})}
+              />
+            ))
+          )}
 
           <SectionTitle title="Trends" />
           {trends.map(t => (
@@ -98,27 +150,6 @@ const InsightsScreen = ({navigation}) => {
             </>
           ) : null}
 
-          <SectionTitle
-            title="What affects your mood"
-            action="View all"
-            onAction={() => navigation.navigate(ROUTES.moodFactors, {range})}
-          />
-          {ready.length === 0 ? (
-            <Note>
-              Factors appear once you have a mood and at least 3 days with and 3 days without a factor in this range.
-            </Note>
-          ) : (
-            ready.slice(0, 3).map(f => (
-              <ListRow
-                key={f.id}
-                title={f.title}
-                subtitle={`Mood ${f.withAvg} with vs ${f.withoutAvg} without`}
-                icon={f.icon}
-                color={f.diff >= 0 ? colors.green : colors.red}
-                onPress={() => navigation.navigate(ROUTES.factor, {factorId: f.id, range})}
-              />
-            ))
-          )}
           <Note>These are associations in your own logs, not proof that one thing causes another.</Note>
         </>
       ) : null}
