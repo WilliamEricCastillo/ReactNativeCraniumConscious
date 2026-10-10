@@ -1,6 +1,5 @@
-// Development switch: when false the app opens straight into the tabs and never loads Firebase auth.
-// Set to true to restore the original Firebase login gate (see src/auth/AuthGate.js).
-export const AUTH_ENABLED = false;
+// Firebase login is available in development builds only; production releases remain auth-off.
+export const AUTH_ENABLED = __DEV__;
 
 // Cloud sync (services/data/syncEngine.js) only runs when ALL THREE flags are true, plus a verified user
 // who has explicitly claimed this device's local data. Keep them false until the checklist in

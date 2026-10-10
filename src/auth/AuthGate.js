@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
-import {auth} from '../../services/firebaseconfig';
+import {auth, onAuthStateChanged} from '../../services/firebaseconfig';
 import {setActiveScope} from '../../services/data/localStore';
 import LoginScreen from '../screens/LoginScreen';
 
@@ -17,7 +17,7 @@ const AuthGate = ({children}) => {
 
   useEffect(() => {
     let active = true;
-    const unsubscribe = auth.onAuthStateChanged(async user => {
+    const unsubscribe = onAuthStateChanged(auth, async user => {
       setSession({ready: false, uid: null});
       let uid = user ? user.uid : null;
       try {

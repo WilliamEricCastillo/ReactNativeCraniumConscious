@@ -1,4 +1,5 @@
 import React from 'react';
+import {Alert} from 'react-native';
 import {render, fireEvent, waitFor} from '@testing-library/react-native';
 
 const mockAuth = {};
@@ -20,6 +21,8 @@ const LoginScreen = require('../LoginScreen').default;
 
 beforeEach(() => jest.clearAllMocks());
 
+jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
 const fill = (utils, label, value) => fireEvent.changeText(utils.getByLabelText(label), value);
 
 test('invalid input never reaches Firebase and explains the problem', () => {
@@ -32,13 +35,44 @@ test('invalid input never reaches Firebase and explains the problem', () => {
   expect(mockSignIn).not.toHaveBeenCalled();
 });
 
-test('a wrong password shows a message that does not reveal whether the account exists', async () => {
-  mockSignIn.mockRejectedValueOnce({code: 'auth/user-not-found'});
+test('invalid credentials show a message that does not reveal whether the account exists', async () => {
+  mockSignIn.mockRejectedValueOnce({code: 'auth/invalid-credential'});
   const utils = render(<LoginScreen />);
   fill(utils, 'Email', 'a@example.com');
   fill(utils, 'Password', 'secret123');
   fireEvent.press(utils.getByText('Sign in'));
   await waitFor(() => expect(utils.getByText('The email or password is not correct.')).toBeTruthy());
+});
+
+test('network failures show a retryable connection message', async () => {
+  mockSignIn.mockRejectedValueOnce({code: 'auth/network-request-failed'});
+  const utils = render(<LoginScreen />);
+  fill(utils, 'Email', 'a@example.com');
+  fill(utils, 'Password', 'secret123');
+  fireEvent.press(utils.getByText('Sign in'));
+  await waitFor(() => expect(utils.getByText('No connection. Check your internet and try again.')).toBeTruthy());
+});
+
+test('an unverified account is allowed to sign in with an explicit verification warning', async () => {
+  mockSignIn.mockResolvedValueOnce({user: {emailVerified: false}});
+  const utils = render(<LoginScreen />);
+  fill(utils, 'Email', 'a@example.com');
+  fill(utils, 'Password', 'secret123');
+  fireEvent.press(utils.getByText('Sign in'));
+  await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith(
+    'Verify your email',
+    'Your account is signed in, but this email address is not verified. Cloud sync remains disabled.',
+  ));
+});
+
+test('a verified account signs in without an unverified warning', async () => {
+  mockSignIn.mockResolvedValueOnce({user: {emailVerified: true}});
+  const utils = render(<LoginScreen />);
+  fill(utils, 'Email', 'a@example.com');
+  fill(utils, 'Password', 'secret123');
+  fireEvent.press(utils.getByText('Sign in'));
+  await waitFor(() => expect(mockSignIn).toHaveBeenCalled());
+  expect(Alert.alert).not.toHaveBeenCalled();
 });
 
 test('sign-up enforces password rules and sends a verification email', async () => {

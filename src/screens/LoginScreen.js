@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 
 import {
@@ -92,9 +92,17 @@ const LoginScreen = () => {
         setInfo('If an account exists for that email, a reset link is on its way.');
       } else if (mode === 'signUp') {
         const credential = await createUserWithEmailAndPassword(auth, address, password);
-        await sendEmailVerification(credential.user).catch(() => {});
+        try {
+          await sendEmailVerification(credential.user);
+          Alert.alert('Verify your email', 'A verification link has been sent. Cloud sync remains disabled.');
+        } catch {
+          Alert.alert('Email verification not sent', 'Your account was created, but we could not send a verification link. You can try again later.');
+        }
       } else {
-        await signInWithEmailAndPassword(auth, address, password);
+        const credential = await signInWithEmailAndPassword(auth, address, password);
+        if (!credential.user.emailVerified) {
+          Alert.alert('Verify your email', 'Your account is signed in, but this email address is not verified. Cloud sync remains disabled.');
+        }
       }
     } catch (e) {
       setError(messageFor(e));
