@@ -1,15 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const JOURNAL_ENTRIES_KEY = '@cranium-conscious/journal-entries';
+// Phase 1 storage key. Read-only now: the data layer (services/data) imports these entries once and
+// leaves this key untouched as a backup. Do not write new data here.
+export const LEGACY_JOURNAL_ENTRIES_KEY = '@cranium-conscious/journal-entries';
 
-export const getJournalEntries = async () => {
-  const storedEntries = await AsyncStorage.getItem(JOURNAL_ENTRIES_KEY);
-  return storedEntries ? JSON.parse(storedEntries) : [];
-};
-
-export const saveJournalEntry = async entry => {
-  const entries = await getJournalEntries();
-  const updatedEntries = [...entries, entry];
-  await AsyncStorage.setItem(JOURNAL_ENTRIES_KEY, JSON.stringify(updatedEntries));
-  return updatedEntries;
+// Throws when the stored value is not a JSON array, so the caller never mistakes unreadable data for "no data".
+export const readLegacyJournalEntries = async () => {
+  const stored = await AsyncStorage.getItem(LEGACY_JOURNAL_ENTRIES_KEY);
+  if (!stored) return [];
+  const parsed = JSON.parse(stored);
+  if (!Array.isArray(parsed)) throw new Error('Legacy journal entries are not a list.');
+  return parsed;
 };

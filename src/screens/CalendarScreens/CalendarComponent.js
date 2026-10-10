@@ -3,9 +3,19 @@ import {SafeAreaView, StyleSheet, TouchableOpacity, View, Modal, Text, ScrollVie
 import {Calendar} from 'react-native-calendars';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import JournalEntryScreen from './JournalEntryComponent.js';
-import {format} from 'date-fns-tz';
+import {todayISO} from '../../utils/dates';
 import BackgroundImage from '../../assets/Backgroundimage';
-import {getJournalEntries} from '../../../services/localStorage';
+import {listJournalEntries} from '../../../services/data/dataService';
+
+// Defined at module level: a component declared inside render would remount the editor on every parent update.
+const JournalEntryModalContent = ({date, onClose}) => (
+  <View style={styles.modalContainer}>
+    <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityLabel="Close">
+      <MaterialCommunityIcons name="close-circle-outline" size={50} color="#F2F3FF" />
+    </TouchableOpacity>
+    <JournalEntryScreen route={{params: {date}}} onClose={onClose} />
+  </View>
+);
 
 const CalendarComponent = () => {
   const [selectedDate, setSelectedDate] = useState('');
@@ -15,7 +25,7 @@ const CalendarComponent = () => {
 
   const loadJournalEntries = async () => {
     try {
-      const entries = await getJournalEntries();
+      const entries = await listJournalEntries();
       setJournalEntries(entries);
     } catch (error) {
       console.error('Error loading local journal entries:', error);
@@ -23,9 +33,7 @@ const CalendarComponent = () => {
   };
 
   useEffect(() => {
-    const today = format(new Date(), 'yyyy-MM-dd', {
-      timeZone: 'America/Chicago',
-    });
+    const today = todayISO();
     setSelectedDate(today);
     setMinDate(today);
     loadJournalEntries();
@@ -49,17 +57,6 @@ const CalendarComponent = () => {
   }
 
   const selectedEntries = journalEntries.filter(entry => entry.date === selectedDate);
-
-  const JournalEntryModalContent = ({date, onClose}) => (
-    <View style={styles.modalContainer}>
-      <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-          <MaterialCommunityIcons
-            name="close-circle-outline"
-            size={50}/>
-      </TouchableOpacity>
-      <JournalEntryScreen route={{ params: { date } }} onClose={onClose} />
-    </View>
-  );
 
   return (
     <>
@@ -204,9 +201,8 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: 'white',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#07091A',
+    paddingTop: 70,
   },
   closeButton: {
     position: 'absolute',

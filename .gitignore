@@ -1,10 +1,62 @@
-# OSX
-#
-.DS_Store
 
-# Xcode
-#
-build/
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+*.iml
+*.swp
+*.swo
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# KEEP package-lock.json, yarn.lock,# Dependency lockfiles
+# Commit the lockfile for the package manager this project uses.
+# Do not ignore package-lock.json, yarn.lock, or pnpm-lock.yaml.and pnpm-lock.yaml tracked!
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# React Native bundles
+*.jsbundle
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+buck-out/
+.buckd/
+android/.cxx/
+android/.externalNativeBuild/
+android/app/release/
+android/app/debug/
+android/signing.properties
+
+# Android signing credentials
+*.keystore
+*.jks
+*.aab
+*.apk
+
+# iOS / Xcode
+ios/Pods/
+ios/build/
+ios/DerivedData/
+DerivedData/
 *.pbxuser
 !default.pbxuser
 *.mode1v3
@@ -13,46 +65,56 @@ build/
 !default.mode2v3
 *.perspectivev3
 !default.perspectivev3
-xcuserdata
+xcuserdata/
 *.xccheckout
 *.moved-aside
-DerivedData
-*.hmap
-*.ipa
 *.xcuserstate
-project.xcworkspace
+*.ipa
+*.mobileprovision
+*.provisionprofile
+*.p12
+*.cer
+*.p8
+*.pem
+project.xcworkspace/
 
-# Android/IntelliJ
-#
-build/
-.idea
-.gradle
-local.properties
-*.iml
-
-# node.js
-#
-node_modules/
-package-lock.json # include if you are using npm - don't use both yarn and npm
-npm-debug.log
-yarn-error.log
-yarn.lock # include if you are using yarn - don't use both npm and yarn
-
-# BUCK
-buck-out/
-\.buckd/
-*.keystore
-
-# Fastlane
-#
-# It is recommended to not store the screenshots in the git repo. Instead, use Fastlane to re-generate the
-# screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/
-
+# Fastlane generated files
 */fastlane/report.xml
 */fastlane/Preview.html
-*/fastlane/screenshots
+*/fastlane/screenshots/
 
-# Bundle artifact
-*.jsbundle
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.development.example
+!.env.production.example
+serviceAccountKey.json
+service-account*.json
+firebase-adminsdk-*.json
+google-services-secret.json
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.new.*
+*.old
+
+# Test coverage
+coverage/
+
+# Local database and generated data
+*.sqlite
+*.sqlite3
+*.db
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# R history files
+.Rhistory
+**/.Rhistory

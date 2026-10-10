@@ -1,130 +1,176 @@
-import React, {useState, useEffect} from 'react';
-import {View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity, Alert,} from 'react-native';
-import {auth, db} from '../../../services/firebaseconfig.js';
-import {collection, addDoc} from 'firebase/firestore';
+import React, {useState, useEffect, useRef, useCallback} from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {format} from 'date-fns';
+import {
+  createJournalEntry,
+  updateJournalEntry,
+  getJournalDraft,
+  saveJournalDraft,
+  clearJournalDraft,
+  journalDraftId,
+} from '../../../services/data/dataService';
+import {DataValidationError, MAX_JOURNAL_LENGTH} from '../../../services/data/models';
+import {formatLongDate} from '../../utils/dates';
+import {colors, moodOptions, radius, space, MIN_TOUCH} from '../../theme/theme';
 
 const Content = ({
   formattedDate,
   formattedTime,
   isCurrentDate,
+  prompt,
   journalText,
   moodValue,
   handleInputChange,
   handleMoodSelection,
   handleSubmit,
-  iconButtonStyles,
-  iconStyles,
+  submitLabel,
+  saving,
+  notice,
 }) => (
   <>
-    <View style={styles.dateContainer}>
+    <View style={styles.metaRow}>
+      <MaterialCommunityIcons name="calendar-month-outline" size={20} color={colors.primary} />
       <Text style={styles.label}>Date: </Text>
-      <Text style={styles.dateText}>
+      <Text style={styles.metaText}>
         {formattedDate} {isCurrentDate && '(Current Date)'}
       </Text>
     </View>
-    <View style={styles.timeContainer}>
+    <View style={styles.metaRow}>
+      <MaterialCommunityIcons name="clock-outline" size={20} color={colors.primary} />
       <Text style={styles.label}>Time: </Text>
-      <Text style={styles.dateText}>{formattedTime}</Text>
+      <Text style={styles.metaText}>{formattedTime}</Text>
     </View>
+
+    {prompt ? (
+      <View style={styles.promptCard}>
+        <Text style={styles.promptKicker}>PROMPT</Text>
+        <Text style={styles.promptText}>{prompt}</Text>
+      </View>
+    ) : null}
+
+    {notice ? <Text style={styles.notice}>{notice}</Text> : null}
     <TextInput
       style={styles.input}
       textAlignVertical="top"
       multiline
+      maxLength={MAX_JOURNAL_LENGTH}
       value={journalText}
       placeholder="Write your journal entry here..."
+      placeholderTextColor={colors.textMuted}
+      accessibilityLabel="Journal entry"
       onChangeText={handleInputChange}
     />
 
-    <View style={styles.feelingContainer}>
-      <Text style={styles.feelingText}>Mood:</Text>
-      <View style={styles.iconButtonContainer}>
-        {[5, 4, 3, 2, 1].map(value => (
+    <Text style={styles.feelingText}>Mood:</Text>
+    <View style={styles.iconButtonContainer}>
+      {moodOptions.map(option => {
+        const selected = moodValue === option.value;
+        return (
           <TouchableOpacity
-            key={value}
-            style={[styles.iconButton, iconButtonStyles(value)]}
-            onPress={() => handleMoodSelection(value)}>
-            <Text style={[styles.icon, iconStyles(value)]}>
-              {value === 5
-                ? '😍'
-                : value === 4
-                ? '😊'
-                : value === 3
-                ? '😐'
-                : value === 2
-                ? '☹️'
-                : '😠'}
-            </Text>
+            key={option.value}
+            accessibilityRole="button"
+            accessibilityLabel={`Mood ${option.label}`}
+            accessibilityState={{selected}}
+            style={[
+              styles.iconButton,
+              selected && {backgroundColor: option.color, borderColor: option.color},
+            ]}
+            onPress={() => handleMoodSelection(option.value)}>
+            <Text style={[styles.icon, !selected && {opacity: 0.75}]}>{option.emoji}</Text>
           </TouchableOpacity>
-        ))}
-      </View>
+        );
+      })}
     </View>
+    <Text style={styles.moodCaption}>
+      {moodValue === 0
+        ? 'Select how you feel'
+        : moodOptions.find(m => m.value === moodValue)?.label}
+    </Text>
 
     <TouchableOpacity
-      style={[
-        styles.submitButton,
-        journalText.trim() === '' && styles.submitButtonDisabled,
-      ]}
+      accessibilityRole="button"
+      style={[styles.submitButton, (journalText.trim() === '' || saving) && styles.submitButtonDisabled]}
       onPress={handleSubmit}
-      disabled={journalText.trim() === ''}>
-      <Text style={styles.submitButtonText}>Submit</Text>
+      disabled={journalText.trim() === '' || saving}>
+      <Text style={styles.submitButtonText}>{submitLabel}</Text>
     </TouchableOpacity>
   </>
 );
 
-const JournalEntryScreen = ({route, navigation, onClose}) => {
+// Existing journal-entry screen, restyled. Also used for prompt entries (`prompt`) and editing (`entry`).
+const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
   const {date} = route.params;
 
-  const convertDateFormat = dateString => {
-    const monthMap = {
-      '01': 'January',
-      '02': 'February',
-      '03': 'March',
-      '04': 'April',
-      '05': 'May',
-      '06': 'June',
-      '07': 'July',
-      '08': 'August',
-      '09': 'September',
-      '10': 'October',
-      '11': 'November',
-      '12': 'December',
+  const formattedDate = formatLongDate(date);
+  const isCurrentDate = format(new Date(), 'yyyy-MM-dd') === date;
+
+  const [moodValue, setMoodValue] = useState(entry ? entry.moodValue : 0);
+  const [journalText, setJournalText] = useState(entry ? entry.journal : '');
+  const [currentTime, setCurrentTime] = useState(entry ? entry.time : format(new Date(), 'hh:mm a'));
+  const [saving, setSaving] = useState(false);
+  const [restored, setRestored] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+
+  // Unsaved writing is kept on this device (never uploaded) so Back, a crash or a remount cannot lose it.
+  const draftId = journalDraftId({date, entryId: entry?.id, prompt});
+  const latest = useRef({journalText: '', moodValue: 0});
+  latest.current = {journalText, moodValue};
+  const submitted = useRef(false);
+  const dirty = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    getJournalDraft(draftId)
+      .then(draft => {
+        if (!active || !draft || typeof draft.journal !== 'string') return;
+        setJournalText(draft.journal);
+        if (draft.moodValue >= 1 && draft.moodValue <= 5) setMoodValue(draft.moodValue);
+        setRestored(true);
+      })
+      .catch(() => {})
+      .finally(() => active && setDraftLoaded(true));
+    return () => {
+      active = false;
     };
+  }, [draftId]);
 
-    const [year, month, day] = dateString.split('-');
-    return `${monthMap[month]} ${day}, ${year}`;
-  };
-
-  const formattedDate = convertDateFormat(date);
-  const currentDate = new Date();
-  const isCurrentDate = format(currentDate, 'yyyy-MM-dd') === date;
-
-  const [moodValue, setMoodValue] = useState(0);
-  const [journalText, setJournalText] = useState('');
-  const [currentTime, setCurrentTime] = useState('');
-
-  const [currentUser, setCurrentUser] = useState(null);
+  const persistDraft = useCallback(() => {
+    if (submitted.current || !dirty.current) return;
+    dirty.current = false;
+    const {journalText: text, moodValue: mood} = latest.current;
+    const unchanged = entry ? text === entry.journal && mood === entry.moodValue : text.trim() === '' && mood === 0;
+    const task = unchanged ? clearJournalDraft(draftId) : saveJournalDraft(draftId, {journal: text, moodValue: mood});
+    task.catch(() => {});
+  }, [draftId, entry]);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(user => {
-      if (user) {
-        setCurrentUser(user);
-      } else {
-        setCurrentUser(null);
-      }
-    });
+    if (!draftLoaded) return undefined;
+    dirty.current = true;
+    const timer = setTimeout(persistDraft, 700);
+    return () => clearTimeout(timer);
+  }, [journalText, moodValue, draftLoaded, persistDraft]);
 
-    return () => unsubscribe();
-  }, []);
-
+  useEffect(() => () => persistDraft(), [persistDraft]);
   useEffect(() => {
-    // Update current time when component mounts
+    if (entry) {
+      return undefined;
+    }
     const interval = setInterval(() => {
       setCurrentTime(format(new Date(), 'hh:mm a'));
     }, 1000);
-
     return () => clearInterval(interval);
-  }, []);
+  }, [entry]);
 
   const handleMoodSelection = value => {
     setMoodValue(value);
@@ -135,178 +181,123 @@ const JournalEntryScreen = ({route, navigation, onClose}) => {
   };
 
   const handleSubmit = async () => {
-    if (!currentUser) {
-      Alert.alert('Error', 'User information not available');
-      return;
-    }
-
     if (moodValue === 0) {
       Alert.alert('Error', 'Mood entry must be selected');
       return;
     }
 
-    console.log('Submitted text:', journalText);
-    console.log('Mood Value:', moodValue);
-    console.log('Date:', date);
-    console.log('Time:', currentTime);
-    console.log('UserID:', currentUser.uid);
-
+    setSaving(true);
+    submitted.current = true;
     try {
-      const entryRef = collection(db, 'JournalEntries');
-      await addDoc(entryRef, {
-        userID: currentUser.uid,
-        date: date.toString(),
-        time: currentTime.toString(),
-        moodValue: moodValue,
-        journal: journalText,
-      });
+      if (entry) {
+        await updateJournalEntry(entry.id, {journal: journalText, moodValue});
+      } else {
+        await createJournalEntry({
+          date: date.toString(),
+          time: currentTime.toString(),
+          moodValue,
+          journal: journalText,
+          prompt,
+        });
+      }
 
+      await clearJournalDraft(draftId).catch(() => {});
       Alert.alert('Success', 'Journal Entry and Mood Saved!');
       onClose();
     } catch (error) {
-      console.error('Error adding document:', error);
+      submitted.current = false;
+      setSaving(false);
+      if (error instanceof DataValidationError) {
+        Alert.alert('Error', error.message);
+      } else {
+        Alert.alert('Error', 'Could not save the entry on this device.');
+      }
     }
   };
 
-  const moodColors = ['#FF6347', '#FFA500', 'yellow', '#1da118', '#c33cf0'];
-
-  const iconButtonStyles = value => ({
-    padding: 12,
-    borderRadius: 25,
-    marginHorizontal: 7,
-    borderWidth: 1,
-    backgroundColor: moodValue === value ? moodColors[value - 1] : 'white',
-  });
-
-  const iconStyles = value => ({
-    alignSelf: 'center',
-    fontSize: 24,
-    color: moodValue === value ? '#333' : 'black',
-  });
-
   return (
-    <>
-      {Platform.OS === 'android' ? (
-        <KeyboardAvoidingView style={styles.container} behavior="height">
-          <Content
-            formattedDate={formattedDate}
-            formattedTime={currentTime}
-            isCurrentDate={isCurrentDate}
-            journalText={journalText}
-            moodValue={moodValue}
-            handleInputChange={handleInputChange}
-            handleMoodSelection={handleMoodSelection}
-            handleSubmit={handleSubmit}
-            iconButtonStyles={iconButtonStyles}
-            iconStyles={iconStyles}
-          />
-        </KeyboardAvoidingView>
-      ) : (
-        <View style={styles.container}>
-          <Content
-            formattedDate={formattedDate}
-            formattedTime={currentTime}
-            isCurrentDate={isCurrentDate}
-            journalText={journalText}
-            moodValue={moodValue}
-            handleInputChange={handleInputChange}
-            handleMoodSelection={handleMoodSelection}
-            handleSubmit={handleSubmit}
-            iconButtonStyles={iconButtonStyles}
-            iconStyles={iconStyles}
-          />
-        </View>
-      )}
-    </>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled">
+        <Content
+          formattedDate={formattedDate}
+          formattedTime={currentTime}
+          isCurrentDate={isCurrentDate}
+          prompt={prompt}
+          journalText={journalText}
+          moodValue={moodValue}
+          handleInputChange={handleInputChange}
+          handleMoodSelection={handleMoodSelection}
+          handleSubmit={handleSubmit}
+          submitLabel={entry ? 'Save changes' : 'Submit'}
+          saving={saving}
+          notice={restored ? 'Restored your unsaved writing.' : null}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    width: '100%',
-    padding: 16,
-    marginTop: 40,
-    backgroundColor: 'white',
+  flex: {flex: 1, width: '100%', backgroundColor: colors.bg},
+  container: {padding: space.lg, paddingBottom: space.xl * 2},
+  metaRow: {flexDirection: 'row', alignItems: 'center', marginBottom: space.sm},
+  label: {fontWeight: 'bold', fontSize: 18, color: colors.text, marginLeft: space.sm},
+  metaText: {fontSize: 18, color: colors.textMuted, flexShrink: 1},
+  notice: {color: colors.textMuted, fontSize: 13, marginTop: space.md},
+  promptCard: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: space.lg,
+    marginTop: space.md,
   },
-  label: {
-    fontWeight: 'bold',
-    fontSize: 20,
-    color: 'black',
-  },
-  dateText: {
-    fontSize: 20,
-    color: 'black',
-  },
+  promptKicker: {color: colors.primary, fontSize: 11, fontWeight: '700', letterSpacing: 1},
+  promptText: {color: colors.text, fontSize: 18, fontWeight: '600', marginTop: space.xs, lineHeight: 25},
   input: {
-    borderColor: 'gray',
     width: '100%',
-    height: '50%',
+    minHeight: 220,
+    borderColor: colors.border,
     borderWidth: 1,
-    padding: 10,
-    borderRadius: 10,
-    margin: 12,
-    elevation: 5,
-    backgroundColor: 'white',
+    padding: space.lg,
+    borderRadius: radius.lg,
+    marginVertical: space.lg,
+    backgroundColor: colors.surface,
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 24,
   },
+  feelingText: {fontSize: 18, fontWeight: 'bold', color: colors.primary, marginBottom: space.sm},
+  iconButtonContainer: {flexDirection: 'row', justifyContent: 'space-between'},
   iconButton: {
-    padding: 12,
-    borderRadius: 25,
-    marginHorizontal: 7,
+    flex: 1,
+    height: 56,
+    minWidth: MIN_TOUCH,
+    marginHorizontal: 4,
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: 'black',
-  },
-  icon: {
-    alignSelf: 'center',
-    fontSize: 24,
-  },
-  dateContainer: {
-    paddingTop: 60,
-    paddingLeft: 5,
-    flexDirection: 'row',
-    alignSelf: 'flex-start',
-  },
-  timeContainer: {
-    paddingTop: 10,
-    paddingLeft: 5,
-    flexDirection: 'row',
-    alignSelf: 'flex-start',
-  },
-  feelingContainer: {
-    borderRadius: 10,
-    flexDirection: 'row',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     alignItems: 'center',
-    textAlign: 'left',
-    alignSelf: 'flex-start',
-  },
-  feelingText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#784888',
-    paddingLeft: 5,
-  },
-  iconButtonContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  submitButton: {
-    backgroundColor: '#316FF6',
-    width: '100%',
-    padding: 12,
-    borderRadius: 10,
-    marginTop: 20,
     justifyContent: 'center',
   },
-  submitButtonDisabled: {
-    backgroundColor: '#a3a3a3',
+  icon: {fontSize: 26},
+  moodCaption: {color: colors.textMuted, textAlign: 'center', marginTop: space.sm, fontSize: 14},
+  submitButton: {
+    backgroundColor: colors.primary,
+    width: '100%',
+    minHeight: 54,
+    borderRadius: radius.md,
+    marginTop: space.xl,
+    justifyContent: 'center',
   },
-  submitButtonText: {
-    textAlign: 'center',
-    fontWeight: 'bold',
-    fontSize: 15,
-    color: 'white',
-  },
+  submitButtonDisabled: {backgroundColor: colors.surfaceAlt, opacity: 0.7},
+  submitButtonText: {textAlign: 'center', fontWeight: 'bold', fontSize: 16, color: colors.text},
 });
 
 export default JournalEntryScreen;
