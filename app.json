@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "ReactNativeCraniumConscious",
+    "slug": "ReactNativeCraniumConscious",
+    "version": "1.0.0",
+    "ios": {
+      "bundleIdentifier": "org.name.ReactNativeCraniumConscious"
+    }
+  }
+}

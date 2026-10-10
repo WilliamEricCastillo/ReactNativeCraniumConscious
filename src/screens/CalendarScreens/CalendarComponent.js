@@ -5,21 +5,35 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import JournalEntryScreen from './JournalEntryComponent.js';
 import {format} from 'date-fns-tz';
 import BackgroundImage from '../../assets/Backgroundimage';
+import {getJournalEntries} from '../../../services/localStorage';
 
 const CalendarComponent = () => {
   const [selectedDate, setSelectedDate] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [minDate, setMinDate] = useState('');
+  const [journalEntries, setJournalEntries] = useState([]);
+
+  const loadJournalEntries = async () => {
+    try {
+      const entries = await getJournalEntries();
+      setJournalEntries(entries);
+    } catch (error) {
+      console.error('Error loading local journal entries:', error);
+    }
+  };
 
   useEffect(() => {
-    const currentDate = new Date().toISOString().split('T')[0];
-    setSelectedDate(currentDate);
-
-    const formattedMinDate = format(new Date(), 'yyyy-MM-dd', {
+    const today = format(new Date(), 'yyyy-MM-dd', {
       timeZone: 'America/Chicago',
     });
-    setMinDate(formattedMinDate);
+    setSelectedDate(today);
+    setMinDate(today);
+    loadJournalEntries();
   }, []);
+
+  useEffect(() => {
+    loadJournalEntries();
+  }, [selectedDate]);
 
   const handleDayPress = day => {
     setSelectedDate(day.dateString);
@@ -33,6 +47,8 @@ const CalendarComponent = () => {
       selectedColor: '#316FF6',
     };
   }
+
+  const selectedEntries = journalEntries.filter(entry => entry.date === selectedDate);
 
   const JournalEntryModalContent = ({date, onClose}) => (
     <View style={styles.modalContainer}>
@@ -73,27 +89,16 @@ const CalendarComponent = () => {
               contentContainerStyle={styles.scrollViewContent}
               persistentScrollbar={true}
           >
-            <View style={styles.journalContainer}>
-              <Text style={styles.chartText}>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Amet est placerat in egestas. Vestibulum mattis ullamcorper velit sed ullamcorper morbi. Ante in nibh mauris cursus. Neque gravida in fermentum et sollicitudin ac orci phasellus egestas. In hac habitasse platea dictumst quisque sagittis purus. Morbi tristique senectus et netus et malesuada fames ac. Eu sem integer vitae justo eget magna fermentum iaculis eu. Faucibus pulvinar elementum integer enim. Consequat ac felis donec et odio pellentesque diam volutpat.
-                Venenatis tellus in metus vulputate. Amet tellus cras adipiscing enim eu turpis. Donec ultrices tincidunt arcu non. Mauris vitae ultricies leo integer malesuada. Egestas purus viverra accumsan in nisl. Massa placerat duis ultricies lacus sed turpis. Ac turpis egestas integer eget. Gravida neque convallis a cras semper auctor neque. Faucibus pulvinar elementum integer enim neque. Cursus risus at ultrices mi. Cras adipiscing enim eu turpis egestas pretium. Cras pulvinar mattis nunc sed. Urna neque viverra justo nec ultrices dui. Eget nunc lobortis mattis aliquam.</Text>
-            </View>
-            <View style={styles.journalContainer}>
-              <Text style={styles.chartText}>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ac orci phasellus egestas tellus rutrum tellus pellentesque eu. Euismod lacinia at quis risus sed vulputate odio ut enim. Congue mauris rhoncus aenean vel elit scelerisque mauris pellentesque. Mauris cursus mattis molestie a iaculis at. Vel pharetra vel turpis nunc. Tristique magna sit amet purus. Scelerisque purus semper eget duis at tellus at urna. Netus et malesuada fames ac turpis egestas integer eget aliquet. Pellentesque elit ullamcorper dignissim cras tincidunt lobortis feugiat vivamus. Sagittis purus sit amet volutpat consequat. Lorem ipsum dolor sit amet consectetur.</Text>
-            </View>
-            <View style={styles.journalContainer}>
-              <Text style={styles.chartText}>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Amet est placerat in egestas. Vestibulum mattis ullamcorper velit sed ullamcorper morbi. Ante in nibh mauris cursus. Neque gravida in fermentum et sollicitudin ac orci phasellus egestas. In hac habitasse platea dictumst quisque sagittis purus. Morbi tristique senectus et netus et malesuada fames ac. Eu sem integer vitae justo eget magna fermentum iaculis eu. Faucibus pulvinar elementum integer enim. Consequat ac felis donec et odio pellentesque diam volutpat.
-                Venenatis tellus in metus vulputate. Amet tellus cras adipiscing enim eu turpis. Donec ultrices tincidunt arcu non. Mauris vitae ultricies leo integer malesuada. Egestas purus viverra accumsan in nisl. Massa placerat duis ultricies lacus sed turpis. Ac turpis egestas integer eget. Gravida neque convallis a cras semper auctor neque. Faucibus pulvinar elementum integer enim neque. Cursus risus at ultrices mi. Cras adipiscing enim eu turpis egestas pretium. Cras pulvinar mattis nunc sed. Urna neque viverra justo nec ultrices dui. Eget nunc lobortis mattis aliquam.</Text>
-            </View>
-            <View style={styles.journalContainer}>
-              <Text style={styles.chartText}>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ac orci phasellus egestas tellus rutrum tellus pellentesque eu. Euismod lacinia at quis risus sed vulputate odio ut enim. Congue mauris rhoncus aenean vel elit scelerisque mauris pellentesque. Mauris cursus mattis molestie a iaculis at. Vel pharetra vel turpis nunc. Tristique magna sit amet purus. Scelerisque purus semper eget duis at tellus at urna. Netus et malesuada fames ac turpis egestas integer eget aliquet. Pellentesque elit ullamcorper dignissim cras tincidunt lobortis feugiat vivamus. Sagittis purus sit amet volutpat consequat. Lorem ipsum dolor sit amet consectetur.</Text>
-            </View>
-            <View style={styles.journalContainer}>
-              <Text style={styles.chartText}>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Amet est placerat in egestas. Vestibulum mattis ullamcorper velit sed ullamcorper morbi. Ante in nibh mauris cursus. Neque gravida in fermentum et sollicitudin ac orci phasellus egestas. In hac habitasse platea dictumst quisque sagittis purus. Morbi tristique senectus et netus et malesuada fames ac. Eu sem integer vitae justo eget magna fermentum iaculis eu. Faucibus pulvinar elementum integer enim. Consequat ac felis donec et odio pellentesque diam volutpat.
-                Venenatis tellus in metus vulputate. Amet tellus cras adipiscing enim eu turpis. Donec ultrices tincidunt arcu non. Mauris vitae ultricies leo integer malesuada. Egestas purus viverra accumsan in nisl. Massa placerat duis ultricies lacus sed turpis. Ac turpis egestas integer eget. Gravida neque convallis a cras semper auctor neque. Faucibus pulvinar elementum integer enim neque. Cursus risus at ultrices mi. Cras adipiscing enim eu turpis egestas pretium. Cras pulvinar mattis nunc sed. Urna neque viverra justo nec ultrices dui. Eget nunc lobortis mattis aliquam.</Text>
-            </View>
-            <View style={styles.journalContainer}>
-              <Text style={styles.chartText}>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ac orci phasellus egestas tellus rutrum tellus pellentesque eu. Euismod lacinia at quis risus sed vulputate odio ut enim. Congue mauris rhoncus aenean vel elit scelerisque mauris pellentesque. Mauris cursus mattis molestie a iaculis at. Vel pharetra vel turpis nunc. Tristique magna sit amet purus. Scelerisque purus semper eget duis at tellus at urna. Netus et malesuada fames ac turpis egestas integer eget aliquet. Pellentesque elit ullamcorper dignissim cras tincidunt lobortis feugiat vivamus. Sagittis purus sit amet volutpat consequat. Lorem ipsum dolor sit amet consectetur.</Text>
-            </View>
+            {selectedEntries.length === 0 ? (
+              <View style={styles.journalContainer}>
+                <Text style={styles.chartText}>No journal entries for this date.</Text>
+              </View>
+            ) : selectedEntries.map(entry => (
+              <View key={entry.id} style={styles.journalContainer}>
+                <Text style={styles.entryTime}>{entry.time} | Mood: {entry.moodValue}/5</Text>
+                <Text style={styles.chartText}>{entry.journal}</Text>
+              </View>
+            ))}
 
           </ScrollView>
         </SafeAreaView>
@@ -118,7 +123,10 @@ const CalendarComponent = () => {
         onRequestClose={() => setModalVisible(false)}>
         <JournalEntryModalContent
           date={selectedDate}
-          onClose={() => setModalVisible(false)}
+          onClose={() => {
+            setModalVisible(false);
+            loadJournalEntries();
+          }}
         />
       </Modal>
     </>
@@ -165,6 +173,15 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 10,
     paddingBottom: 10,
+  },
+  entryTime: {
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: 'black',
+  },
+  chartText: {
+    color: 'black',
+    fontSize: 16,
   },
   dateTime: {
     alignItems: 'center',
