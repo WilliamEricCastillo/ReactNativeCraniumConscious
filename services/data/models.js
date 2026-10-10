@@ -26,6 +26,9 @@ export const PROFILE_ID = 'profile';
 
 export const SCALE_UNIT = 'scale_1_5';
 
+// One glass of water in millilitres, used only to display water in ml or oz.
+export const GLASS_ML = 250;
+
 // Built-in metrics. `storage: 'checkIn'` metrics live on the daily check-in (one source of truth) and are
 // exposed through the metric API; `daily: 'set'` means one record per day (deterministic id, upserted).
 export const BUILTIN_METRICS = {
@@ -226,5 +229,5 @@ export const defaultPreferences = () => ({
   units: {water: 'glasses', distance: 'km'},
   weekStart: 'monday',
   notifications: {dailyReminders: false, weeklySummary: false},
-  trackedMetricIds: ['mood', 'energy', 'stress', 'focus', 'sleep', 'exercise', 'water'],
+  trackedMetricIds: ['mood', 'energy', 'stress', 'focus', 'sleep', 'exercise', 'water', 'meal'],
 });

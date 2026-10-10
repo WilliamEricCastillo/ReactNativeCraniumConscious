@@ -386,7 +386,7 @@ const REASON_TEXT = {
   'auth-disabled': 'Sign-in is turned off in this build.',
   'cloud-sync-disabled': 'Cloud sync is turned off in this build.',
   'rules-unverified': 'Cloud security rules have not been verified yet.',
-  'no-verified-user': 'Sign in to sync.',
+  'no-verified-user': 'Sign in with a verified email to sync.',
   'ownership-unclaimed': 'This device\u2019s data has not been linked to your account yet.',
   'ownership-mismatch': 'This device\u2019s data belongs to a different account.',
 };

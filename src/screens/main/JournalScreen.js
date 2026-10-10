@@ -1,10 +1,11 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {View, Text, StyleSheet, TextInput, TouchableOpacity} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 
 import {Screen, Title, Card, Button, Chip, EmptyState, SectionTitle, Note} from '../../components/ui';
-import {listJournalEntries} from '../../../services/data/dataService';
+import JournalCalendar from '../journal/JournalCalendar';
+import {listJournalEntries, listActiveDates, getPreferences} from '../../../services/data/dataService';
 import {todayISO, formatWeekdayDate} from '../../utils/dates';
 import {colors, moodOptions, radius, space, MIN_TOUCH} from '../../theme/theme';
 import {ROUTES} from '../../navigation/routes';
@@ -16,20 +17,30 @@ const FILTERS = [
   {id: 'low', label: 'Low', test: e => e.moodValue <= 2},
 ];
 
-const JournalScreen = ({navigation}) => {
+const JournalScreen = ({navigation, route}) => {
   const [entries, setEntries] = useState([]);
+  const [activeDates, setActiveDates] = useState([]);
+  const [weekStart, setWeekStart] = useState('monday');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
+  const [view, setView] = useState(route.params?.view === 'calendar' ? 'calendar' : 'list');
+
+  // Today's "Calendar" link opens this tab with params.view.
+  useEffect(() => {
+    if (route.params?.view === 'calendar' || route.params?.view === 'list') setView(route.params.view);
+  }, [route.params?.view]);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      listJournalEntries()
-        .then(list => {
+      Promise.all([listJournalEntries(), listActiveDates(), getPreferences()])
+        .then(([list, dates, prefs]) => {
           if (active) {
             setEntries(list);
+            setActiveDates(dates);
+            setWeekStart(prefs.weekStart);
             setError(false);
           }
         })
@@ -75,14 +86,17 @@ const JournalScreen = ({navigation}) => {
           style={{flex: 1}}
         />
       </View>
-      <Button
-        title="Calendar view"
-        icon="calendar-month-outline"
-        variant="ghost"
-        onPress={() => navigation.navigate(ROUTES.legacyCalendar)}
-        style={{marginTop: space.sm}}
-      />
+      <View style={styles.viewToggle}>
+        <Chip label="List" selected={view === 'list'} onPress={() => setView('list')} />
+        <Chip label="Calendar" selected={view === 'calendar'} onPress={() => setView('calendar')} />
+      </View>
 
+      {error ? <Note>Could not read your saved entries on this device. They have not been removed.</Note> : null}
+
+      {view === 'calendar' ? (
+        <JournalCalendar navigation={navigation} entries={entries} activeDates={activeDates} weekStart={weekStart} />
+      ) : (
+        <>
       <View style={styles.search}>
         <MaterialCommunityIcons name="magnify" size={22} color={colors.textMuted} />
         <TextInput
@@ -99,8 +113,6 @@ const JournalScreen = ({navigation}) => {
           <Chip key={f.id} label={f.label} selected={filter === f.id} onPress={() => setFilter(f.id)} />
         ))}
       </View>
-
-      {error ? <Note>Could not read your saved entries on this device. They have not been removed.</Note> : null}
 
       {!loading && !error && entries.length === 0 ? (
         <EmptyState
@@ -145,12 +157,15 @@ const JournalScreen = ({navigation}) => {
           })}
         </View>
       ))}
+        </>
+      )}
     </Screen>
   );
 };
 
 const styles = StyleSheet.create({
   actions: {flexDirection: 'row'},
+  viewToggle: {flexDirection: 'row', marginTop: space.lg},
   search: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -310,18 +310,51 @@ export const getDaySnapshot = async date => {
     listCustomMetrics({includeArchived: true}),
   ]);
   const entryOf = id => metricEntries.find(e => e.metricId === id) || null;
+  // One mood per day for display: the check-in wins; otherwise the latest journal entry's mood.
+  const journalMood = journalEntries.length ? journalEntries[journalEntries.length - 1].moodValue : null;
+  const checkInMood = checkIn?.mood ?? null;
   return {
     date,
     checkIn,
+    mood: checkInMood ?? journalMood,
+    moodSource: checkInMood != null ? 'check-in' : journalMood != null ? 'journal' : null,
     sleepHours: entryOf('sleep')?.value ?? null,
     exerciseMinutes: entryOf('exercise')?.value ?? null,
     exerciseCategory: entryOf('exercise')?.category ?? null,
     waterGlasses: entryOf('water')?.value ?? null,
+    metricEntryIds: {
+      sleep: entryOf('sleep')?.id ?? null,
+      exercise: entryOf('exercise')?.id ?? null,
+      water: entryOf('water')?.id ?? null,
+    },
     meals: metricEntries.filter(e => e.metricId === 'meal'),
     customEntries: metricEntries.filter(e => e.metricKind === 'custom'),
     customMetricNames: Object.fromEntries(customMetrics.map(m => [m.id, m.name])),
     journalEntries,
   };
+};
+
+// Dates (YYYY-MM-DD, ascending) that have any saved check-in, metric or journal record.
+export const listActiveDates = async ({from, to} = {}) => {
+  const [checkIns, metrics, journal] = await Promise.all([listDailyCheckIns(), listMetricEntries(), listJournalEntries()]);
+  const dates = new Set();
+  [...checkIns, ...metrics, ...journal].forEach(r => {
+    if ((!from || r.date >= from) && (!to || r.date <= to)) dates.add(r.date);
+  });
+  return [...dates].sort();
+};
+
+// All check-ins, metric entries and journal entries dated within [from, to], for charts and goals.
+export const getRangeData = async ({from, to}) => {
+  requireDate(from, 'from');
+  requireDate(to, 'to');
+  const [checkIns, metricEntries, journalEntries] = await Promise.all([
+    listDailyCheckIns({from, to}),
+    listMetricEntries(),
+    listJournalEntries(),
+  ]);
+  const within = r => r.date >= from && r.date <= to;
+  return {checkIns, metricEntries: metricEntries.filter(within), journalEntries: journalEntries.filter(within)};
 };
 
 // Goals
@@ -411,6 +444,23 @@ export const setReminderPreset = ({label, kind, time, daysOfWeek = [0, 1, 2, 3, 
       time,
       daysOfWeek,
       enabled,
+      ...meta(null),
+    });
+  });
+
+// Changes a preset reminder's time (creating it switched off if it does not exist yet); `enabled` is left alone.
+export const setReminderTime = ({label, kind, daysOfWeek = [0, 1, 2, 3, 4, 5, 6]}, time) =>
+  transaction(async tx => {
+    const existing = (await tx.list(COLLECTIONS.reminders)).find(r => sameText(r.label, label));
+    validateReminderInput({label, time, daysOfWeek: existing ? existing.daysOfWeek : daysOfWeek, kind: existing ? existing.kind : kind});
+    if (existing) return tx.put(COLLECTIONS.reminders, {...existing, time, ...meta(existing)});
+    return createRecord(tx, COLLECTIONS.reminders, {
+      id: newId('reminder'),
+      label: label.trim(),
+      kind,
+      time,
+      daysOfWeek,
+      enabled: false,
       ...meta(null),
     });
   });

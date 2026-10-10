@@ -1,0 +1,188 @@
+rules_version = '2';
+
+// PROPOSED rules. Not deployed. Review, run `npm run test:rules`, then publish by hand (see docs/data-schema.md).
+// Data lives under users/{uid}. Only the signed-in owner with a verified email can read or write it.
+// Documents are never hard-deleted by clients: deletes are tombstones (deleted: true) written as normal updates.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function owns(uid) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && request.auth.token.email_verified == true;
+    }
+
+    function common() {
+      return ['id', 'schemaVersion', 'createdAt', 'updatedAt', 'rev', 'deleted', 'deletedAt', 'deviceId', 'serverUpdatedAt'];
+    }
+
+    function isTombstone(d) {
+      return d.get('deleted', false) == true;
+    }
+
+    // Checks every document: right id, integer revision, short strings, server-set timestamp.
+    function validMeta(d, docId) {
+      return d.id == docId
+        && d.rev is int && d.rev >= 1 && d.rev < 1000000000
+        && d.updatedAt is string && d.updatedAt.size() <= 40
+        && d.deviceId is string && d.deviceId.size() <= 100
+        && d.serverUpdatedAt == request.time
+        && d.get('deleted', false) is bool;
+    }
+
+    function tombstoneOk(d) {
+      return d.keys().hasOnly(common());
+    }
+
+    function validDate(v) {
+      return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function scaleOrNull(v) {
+      return v == null || (v is int && v >= 1 && v <= 5);
+    }
+
+    function validJournal(d) {
+      return d.keys().hasOnly(common().concat(['date', 'time', 'moodValue', 'journal', 'prompt', 'source', 'legacyDocId', 'conflictOf']))
+        && validDate(d.date)
+        && d.moodValue is int && d.moodValue >= 1 && d.moodValue <= 5
+        && d.journal is string && d.journal.size() >= 1 && d.journal.size() <= 50000
+        && d.get('time', '') is string && d.get('time', '').size() <= 20
+        && d.get('prompt', '') is string && d.get('prompt', '').size() <= 500
+        && d.source in ['app', 'legacy-local', 'legacy-firestore', 'conflict-copy'];
+    }
+
+    function validCheckIn(d) {
+      return d.keys().hasOnly(common().concat(['date', 'mood', 'energy', 'stress', 'focus', 'scale']))
+        && validDate(d.date)
+        && scaleOrNull(d.mood) && scaleOrNull(d.energy) && scaleOrNull(d.stress) && scaleOrNull(d.focus)
+        && d.scale == 'scale_1_5';
+    }
+
+    function validCustomMetric(d) {
+      return d.keys().hasOnly(common().concat(['name', 'unit', 'valueType', 'archivedAt']))
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 60
+        && d.unit is string && d.unit.size() <= 30
+        && d.valueType in ['number', 'scale', 'boolean']
+        && (d.archivedAt == null || d.archivedAt is string);
+    }
+
+    function validMetricEntry(d) {
+      return d.keys().hasOnly(common().concat(['metricId', 'metricKind', 'date', 'value', 'unit', 'recordedAt', 'label', 'category', 'note']))
+        && d.metricId is string && d.metricId.size() >= 1 && d.metricId.size() <= 200
+        && d.metricKind in ['builtin', 'custom']
+        && validDate(d.date)
+        && d.value is number && d.value >= 0 && d.value <= 100000
+        && d.unit is string && d.unit.size() >= 1 && d.unit.size() <= 30
+        && d.recordedAt is string && d.recordedAt.size() <= 40
+        && d.get('label', '') is string && d.get('label', '').size() <= 200
+        && d.get('category', '') is string && d.get('category', '').size() <= 60
+        && d.get('note', '') is string && d.get('note', '').size() <= 2000;
+    }
+
+    function validGoal(d) {
+      return d.keys().hasOnly(common().concat(['title', 'metricId', 'target', 'status']))
+        && d.title is string && d.title.size() >= 1 && d.title.size() <= 120
+        && d.status in ['active', 'archived']
+        && (d.target == null || d.target is map);
+    }
+
+    function validReminder(d) {
+      return d.keys().hasOnly(common().concat(['label', 'kind', 'time', 'daysOfWeek', 'enabled']))
+        && d.label is string && d.label.size() >= 1 && d.label.size() <= 120
+        && d.kind in ['check-in', 'journal', 'weekly-review', 'custom']
+        && d.time is string && d.time.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+        && d.daysOfWeek is list && d.daysOfWeek.size() <= 7
+        && d.enabled is bool;
+    }
+
+    function validSettings(d) {
+      return d.keys().hasOnly(common().concat(['theme', 'units', 'weekStart', 'notifications', 'trackedMetricIds']))
+        && d.theme == 'dark'
+        && d.units is map && d.notifications is map
+        && d.weekStart in ['sunday', 'monday', 'saturday']
+        && d.trackedMetricIds is list && d.trackedMetricIds.size() <= 200;
+    }
+
+    function validProfile(d) {
+      return d.keys().hasOnly(common().concat(['displayName']))
+        && (d.displayName == null || (d.displayName is string && d.displayName.size() <= 80));
+    }
+
+    // A write is either a tombstone, or a full valid document for its collection.
+    function writeOk(docId, valid) {
+      let d = request.resource.data;
+      return validMeta(d, docId) && (isTombstone(d) ? tombstoneOk(d) : valid);
+    }
+
+    function revIncreases() {
+      return request.resource.data.rev > resource.data.rev;
+    }
+
+    match /users/{uid} {
+      allow read: if owns(uid);
+      allow create: if owns(uid) && writeOk('profile', validProfile(request.resource.data));
+      allow update: if owns(uid) && revIncreases() && writeOk('profile', validProfile(request.resource.data));
+      allow delete: if false;
+
+      match /journalEntries/{docId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid) && writeOk(docId, validJournal(request.resource.data));
+        allow update: if owns(uid) && revIncreases() && writeOk(docId, validJournal(request.resource.data));
+        allow delete: if false;
+      }
+
+      match /dailyCheckIns/{docId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid) && writeOk(docId, validCheckIn(request.resource.data));
+        allow update: if owns(uid) && revIncreases() && writeOk(docId, validCheckIn(request.resource.data));
+        allow delete: if false;
+      }
+
+      match /customMetrics/{docId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid) && writeOk(docId, validCustomMetric(request.resource.data));
+        allow update: if owns(uid) && revIncreases() && writeOk(docId, validCustomMetric(request.resource.data));
+        allow delete: if false;
+      }
+
+      match /metricEntries/{docId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid) && writeOk(docId, validMetricEntry(request.resource.data));
+        allow update: if owns(uid) && revIncreases() && writeOk(docId, validMetricEntry(request.resource.data));
+        allow delete: if false;
+      }
+
+      match /goals/{docId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid) && writeOk(docId, validGoal(request.resource.data));
+        allow update: if owns(uid) && revIncreases() && writeOk(docId, validGoal(request.resource.data));
+        allow delete: if false;
+      }
+
+      match /reminders/{docId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid) && writeOk(docId, validReminder(request.resource.data));
+        allow update: if owns(uid) && revIncreases() && writeOk(docId, validReminder(request.resource.data));
+        allow delete: if false;
+      }
+
+      match /settings/{docId} {
+        allow read: if owns(uid);
+        allow create: if owns(uid) && docId == 'preferences' && writeOk(docId, validSettings(request.resource.data));
+        allow update: if owns(uid) && docId == 'preferences' && revIncreases() && writeOk(docId, validSettings(request.resource.data));
+        allow delete: if false;
+      }
+    }
+
+    // Original app collection: read-only archive. A user may read only documents that carry their own uid.
+    match /JournalEntries/{docId} {
+      allow read: if request.auth != null && resource.data.userID == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

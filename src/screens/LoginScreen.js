@@ -1,253 +1,180 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState} from 'react';
+import {KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+
 import {
-    View,
-    Text,
-    TextInput,
-    StyleSheet,
-    TouchableOpacity,
-    Image,
-    ScrollView,
-    KeyboardAvoidingView,
-    Platform,
-    Alert,
-} from 'react-native';
-import {
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    auth,
-    onAuthStateChanged,
-    signOut,
+  auth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
 } from '../../services/firebaseconfig';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import BackgroundImage from '../assets/Backgroundimage';
+import {Button, Field, Note, Title} from '../components/ui';
+import BrainMark from '../components/BrainMark';
+import {colors, space} from '../theme/theme';
 
-const LoginScreen = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [user, setUser] = useState(null);
-    const [isLogin, setIsLogin] = useState(true);
-    const [showPassword, setShowPassword] = useState(false);
+const MIN_PASSWORD = 8;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    const handleAuthentication = async () => {
-        try {
-            if (user) {
-                console.log('User logged out successfully!');
-                await signOut(auth);
-            } else {
-                if (isLogin) {
-                    await signInWithEmailAndPassword(auth, email, password);
-                    console.log('User signed in successfully!');
-                } else {
-                    // Check if passwords match
-                    if (password !== confirmPassword) {
-                        Alert.alert('Passwords do not match.');
-                        return;
-                    }
-
-                    await createUserWithEmailAndPassword(auth, email, password);
-                    console.log('User created successfully!');
-                }
-            }
-        } catch (error) {
-            console.error('Authentication error:', error.message);
-        }
-    };
-
-    const togglePasswordVisibility = () => {
-        setShowPassword(!showPassword);
-    };
-
-    const toggleLogin = () => {
-        setIsLogin(!isLogin);
-    };
-
-    return (
-        <>
-            <BackgroundImage />
-            <KeyboardAvoidingView
-                style={styles.container}
-                behavior={Platform.OS === 'ios' ? 'padding' : null}>
-                <ScrollView contentContainerStyle={styles.scrollViewContent}>
-                    <View style={styles.innerContainer}>
-                        <Image
-                            source={require('../assets/mind.png')}
-                            style={styles.logo}
-                        />
-                        <Text style={styles.appName}>Cranium Conscious</Text>
-                        <View style={styles.loginContainer}>
-                            <Text style={styles.title}>
-                                {isLogin ? 'Login' : 'Sign Up'}
-                            </Text>
-                            <TextInput
-                                style={styles.input}
-                                value={email}
-                                onChangeText={setEmail}
-                                placeholder="Email"
-                                autoCapitalize="none"
-                            />
-                            <View style={styles.passwordContainer}>
-                                <TextInput
-                                    style={styles.passwordInput}
-                                    value={password}
-                                    onChangeText={setPassword}
-                                    placeholder="Password"
-                                    secureTextEntry={!showPassword}
-                                />
-                                <TouchableOpacity
-                                    onPress={togglePasswordVisibility}
-                                    style={styles.toggleButton}>
-                                    <Ionicons
-                                        name={showPassword ? 'eye' : 'eye-off'}
-                                        size={24}
-                                        color="black"
-                                    />
-                                </TouchableOpacity>
-                            </View>
-                            {!isLogin && (
-                                <TextInput
-                                    style={styles.input}
-                                    value={confirmPassword}
-                                    onChangeText={setConfirmPassword}
-                                    placeholder="Confirm Password"
-                                    secureTextEntry={!showPassword}
-                                />
-                            )}
-                            <TouchableOpacity
-                                onPress={handleAuthentication}
-                                style={styles.button}>
-                                <Text style={styles.buttonText}>
-                                    {isLogin ? 'Sign In' : 'Sign Up'}
-                                </Text>
-                            </TouchableOpacity>
-
-                            <View style={styles.bottomContainer}>
-                                <Text
-                                    style={styles.toggleText}
-                                    onPress={toggleLogin}>
-                                    {isLogin
-                                        ? 'Need an account? Sign Up'
-                                        : 'Already have an account? Sign In'}
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
-        </>
-    );
+// Sign-in problems are described without revealing whether an account exists.
+const messageFor = error => {
+  switch (error?.code) {
+    case 'auth/invalid-email':
+      return 'Enter a valid email address.';
+    case 'auth/invalid-credential':
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+      return 'The email or password is not correct.';
+    case 'auth/email-already-in-use':
+      return 'Could not create that account. Try signing in, or reset your password.';
+    case 'auth/weak-password':
+      return `Choose a password with at least ${MIN_PASSWORD} characters.`;
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Wait a few minutes and try again.';
+    case 'auth/network-request-failed':
+      return 'No connection. Check your internet and try again.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
 };
 
+const MODES = {
+  signIn: {title: 'Welcome back', action: 'Sign in'},
+  signUp: {title: 'Create your account', action: 'Create account'},
+  reset: {title: 'Reset your password', action: 'Send reset email'},
+};
+
+const LoginScreen = () => {
+  const [mode, setMode] = useState('signIn');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [info, setInfo] = useState(null);
+
+  const switchMode = next => {
+    setMode(next);
+    setError(null);
+    setInfo(null);
+  };
+
+  const validate = () => {
+    if (!EMAIL_PATTERN.test(email.trim())) return 'Enter a valid email address.';
+    if (mode === 'reset') return null;
+    if (mode === 'signUp') {
+      if (password.length < MIN_PASSWORD) return `Choose a password with at least ${MIN_PASSWORD} characters.`;
+      if (password !== confirm) return 'The passwords do not match.';
+    } else if (!password) {
+      return 'Enter your password.';
+    }
+    return null;
+  };
+
+  const submit = async () => {
+    const problem = validate();
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const address = email.trim();
+      if (mode === 'reset') {
+        await sendPasswordResetEmail(auth, address).catch(e => {
+          // Do not reveal whether the address has an account.
+          if (e?.code !== 'auth/user-not-found') throw e;
+        });
+        setInfo('If an account exists for that email, a reset link is on its way.');
+      } else if (mode === 'signUp') {
+        const credential = await createUserWithEmailAndPassword(auth, address, password);
+        await sendEmailVerification(credential.user).catch(() => {});
+      } else {
+        await signInWithEmailAndPassword(auth, address, password);
+      }
+    } catch (e) {
+      setError(messageFor(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.logo}>
+            <BrainMark width={150} height={90} />
+          </View>
+          <Title subtitle="Your journal stays private to your account">{MODES[mode].title}</Title>
+
+          <Field
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            textContentType="emailAddress"
+          />
+          {mode !== 'reset' ? (
+            <Field
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete={mode === 'signUp' ? 'new-password' : 'current-password'}
+              textContentType={mode === 'signUp' ? 'newPassword' : 'password'}
+            />
+          ) : null}
+          {mode === 'signUp' ? (
+            <Field
+              label="Confirm password"
+              value={confirm}
+              onChangeText={setConfirm}
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete="new-password"
+              textContentType="newPassword"
+            />
+          ) : null}
+
+          {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+          {info ? <Note>{info}</Note> : null}
+          {mode === 'signUp' ? <Note>We will email you a link to verify your address. Cloud sync needs a verified email.</Note> : null}
+
+          <Button title={busy ? 'Please wait...' : MODES[mode].action} onPress={submit} disabled={busy} />
+
+          <View style={styles.links}>
+            {mode !== 'signIn' ? <Link label="I already have an account" onPress={() => switchMode('signIn')} /> : null}
+            {mode !== 'signUp' ? <Link label="Create an account" onPress={() => switchMode('signUp')} /> : null}
+            {mode === 'signIn' ? <Link label="Forgot password?" onPress={() => switchMode('reset')} /> : null}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+};
+
+const Link = ({label, onPress}) => (
+  <TouchableOpacity onPress={onPress} accessibilityRole="button" style={styles.link}>
+    <Text style={styles.linkText}>{label}</Text>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        paddingBottom: 100,
-    },
-    logo: {
-        height: 150,
-        width: 250,
-        alignSelf: 'center',
-        justifyContent: 'center',
-        marginTop: 50,
-    },
-    appName: {
-        fontWeight: 'bold',
-        fontSize: 33,
-        color: 'black',
-        fontFamily: 'TimesNewRoman',
-        paddingBottom: 10,
-        paddingTop: 8,
-        textShadowColor: 'white',
-        textShadowOffset: { width: -1, height: -1 },
-        textShadowRadius: 5,
-    },
-    innerContainer: {
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    scrollViewContent: {
-        flexGrow: 1,
-        justifyContent: 'center',
-    },
-    loginContainer: {
-        width: '90%',
-        backgroundColor: '#fff',
-        padding: 16,
-        borderRadius: 8,
-    },
-    title: {
-        fontSize: 18,
-        marginBottom: 16,
-        textAlign: 'center',
-    },
-    input: {
-        width: '100%',
-        height: 50,
-        borderWidth: 1,
-        borderColor: '#ccc',
-        borderRadius: 10,
-        paddingHorizontal: 20,
-        marginBottom: 20,
-        backgroundColor: '#fff',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 3,
-    },
-    button: {
-        backgroundColor: '#007bff',
-        width: '100%',
-        height: 50,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    buttonText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    passwordContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 20,
-        paddingHorizontal: 20,
-        backgroundColor: '#fff',
-        borderColor: '#ccc',
-        borderWidth: 1,
-        borderRadius: 10,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 3,
-    },
-    passwordInput: {
-        flex: 1,
-        height: 50,
-    },
-    toggleButton: {
-        padding: 15,
-    },
-    toggleText: {
-        color: '#007bff',
-        textAlign: 'center',
-        fontSize: 16,
-    },
-    bottomContainer: {
-        marginTop: 20,
-    },
+  screen: {flex: 1, backgroundColor: colors.bg},
+  content: {padding: space.lg, paddingBottom: space.xl * 2},
+  logo: {alignItems: 'center', marginVertical: space.lg},
+  error: {color: colors.red, fontSize: 14, marginBottom: space.md},
+  links: {alignItems: 'center', marginTop: space.lg},
+  link: {minHeight: 44, justifyContent: 'center'},
+  linkText: {color: colors.primary, fontSize: 15, fontWeight: '600'},
 });
 
 export default LoginScreen;

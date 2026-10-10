@@ -14,7 +14,6 @@ import InsightsScreen from '../screens/main/InsightsScreen';
 import YouScreen from '../screens/main/YouScreen';
 import AddScreen from '../screens/main/AddScreen';
 import DayScreen from '../screens/DayScreen';
-import CalendarComponent from '../screens/CalendarScreens/CalendarComponent';
 import {
   CheckInScreen,
   MoodLogScreen,
@@ -45,13 +44,7 @@ import {
   DataScreen,
   AboutScreen,
 } from '../screens/you/YouScreens';
-import {
-  SettingsScreen,
-  AppearanceScreen,
-  NotificationsSettingsScreen,
-  UnitsScreen,
-  WeekStartScreen,
-} from '../screens/you/SettingsScreens';
+import {SettingsScreen} from '../screens/you/SettingsScreens';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -135,22 +128,17 @@ const DETAIL_SCREENS = [
   [ROUTES.journalNewPrompt, JournalNewPromptScreen, 'Prompt entry'],
   [ROUTES.journalEntry, JournalEntryDetailScreen, 'Entry'],
   [ROUTES.journalEdit, JournalEditScreen, 'Edit entry'],
-  [ROUTES.legacyCalendar, CalendarComponent, 'Calendar'],
   [ROUTES.moodFactors, MoodFactorsScreen, 'Mood factors'],
   [ROUTES.factor, FactorDetailScreen, 'Factor'],
   [ROUTES.trend, TrendDetailScreen, 'Trend'],
   [ROUTES.goals, GoalsScreen, 'Goals'],
-  [ROUTES.metrics, MetricsScreen, 'Tracked metrics'],
+  [ROUTES.metrics, MetricsScreen, 'My metrics'],
   [ROUTES.metricNew, MetricNewScreen, 'New metric'],
   [ROUTES.metric, MetricDetailScreen, 'Metric'],
   [ROUTES.reminders, RemindersScreen, 'Reminders'],
   [ROUTES.privacy, PrivacyScreen, 'Privacy'],
   [ROUTES.data, DataScreen, 'Data management'],
   [ROUTES.settings, SettingsScreen, 'Settings'],
-  [ROUTES.appearance, AppearanceScreen, 'Appearance'],
-  [ROUTES.notifications, NotificationsSettingsScreen, 'Notifications'],
-  [ROUTES.units, UnitsScreen, 'Units'],
-  [ROUTES.weekStart, WeekStartScreen, 'Week start'],
   [ROUTES.about, AboutScreen, 'About'],
   [ROUTES.day, DayScreen, 'Day'],
 ];

@@ -9,13 +9,16 @@ const PAGE = 200;
 const firestore = () => require('firebase/firestore');
 const database = () => require('../firebaseconfig').db;
 
-// A user counts as verified only if Firebase Auth has a current user and can produce an ID token for them.
+// A user counts as verified only if Firebase Auth has a current user with a verified email who can produce an ID
+// token. The security rules require the same claim, so this fails early instead of on every write.
 export const getVerifiedUid = async () => {
   const {auth} = require('../firebaseconfig');
   const user = auth.currentUser;
   if (!user || !user.uid) return null;
   try {
-    await user.getIdToken();
+    if (!user.emailVerified) await user.reload();
+    if (!user.emailVerified) return null;
+    await user.getIdToken(true);
   } catch {
     return null;
   }

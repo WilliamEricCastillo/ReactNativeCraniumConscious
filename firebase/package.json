@@ -1,0 +1,14 @@
+{
+  "name": "cranium-conscious-rules-tests",
+  "private": true,
+  "description": "Isolated tooling for testing firestore.rules against the local emulator. Never touches a live project.",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-cranium-conscious --config ../firebase.json \"jest --rootDir . --testTimeout 20000\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^10.12.2",
+    "firebase-tools": "^13.35.1",
+    "jest": "^29.7.0"
+  }
+}

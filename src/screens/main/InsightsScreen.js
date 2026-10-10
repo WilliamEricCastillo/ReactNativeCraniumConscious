@@ -2,96 +2,145 @@ import React, {useState} from 'react';
 import {View, Text, StyleSheet} from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 
-import {Screen, Title, Card, Chip, SectionTitle, SampleBadge, MiniBars, Note, ListRow} from '../../components/ui';
-import {METRIC_INFO, SAMPLE_SERIES, WEEK_LABELS, FACTORS} from '../../data/sample';
+import {Screen, Title, Card, Chip, SectionTitle, MiniBars, Note, ListRow, EmptyState} from '../../components/ui';
+import useRangeDays from '../../hooks/useRangeDays';
+import {METRIC_INFO, TREND_METRICS} from '../../data/metrics';
+import {RANGES, seriesFor, bucketize, summarize, trendOf, compareMoodByFactor, factorSentence} from '../../utils/analytics';
 import {colors, space} from '../../theme/theme';
 import {ROUTES} from '../../navigation/routes';
 
-const RANGES = ['Week', 'Month', '3 Months', 'Year'];
-const TREND_METRICS = ['mood', 'energy', 'exercise', 'sleep', 'stress'];
+const TREND_TEXT = {up: 'Trending up', down: 'Trending down', flat: 'Steady'};
 
 const InsightsScreen = ({navigation}) => {
-  const [range, setRange] = useState('Week');
+  const [range, setRange] = useState('week');
+  const {data, error, loaded} = useRangeDays(range);
+  const current = data && data.rangeId === range ? data : null;
+  const days = current?.days ?? [];
+
+  const activeDays = days.filter(d => d.any).length;
+  const entries = days.reduce((n, d) => n + d.journalCount, 0);
+  const moodSummary = summarize(seriesFor(days, 'mood'));
+  const factors = compareMoodByFactor(days);
+  const ready = factors.filter(f => f.enough).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  const key = ready.find(f => Math.abs(f.diff) >= 0.5);
+
+  const trends = TREND_METRICS.map(id => {
+    const points = seriesFor(days, id);
+    return {id, info: METRIC_INFO[id], points, summary: summarize(points), trend: trendOf(points)};
+  }).filter(t => t.summary);
 
   return (
     <Screen tab>
-      <Title subtitle="Patterns in your habits over time">Insights</Title>
+      <Title subtitle="Patterns in your own logs">Insights</Title>
 
       <View style={styles.ranges}>
-        {RANGES.map(r => (
-          <Chip key={r} label={r} selected={range === r} onPress={() => setRange(r)} />
+        {Object.entries(RANGES).map(([id, r]) => (
+          <Chip key={id} label={r.label} selected={range === id} onPress={() => setRange(id)} />
         ))}
       </View>
 
-      <Note>
-        Insights will use your own logged data in a later phase. Everything below is example content
-        for the {range.toLowerCase()} view.
-      </Note>
+      {error ? <Note>Could not read your saved data on this device. Nothing has been removed.</Note> : null}
 
-      <Card>
-        <SampleBadge />
-        <Text style={styles.cardTitle}>Overall balance</Text>
-        <Text style={styles.score}>72</Text>
-        <View style={styles.track}>
-          <View style={[styles.fill, {width: '72%'}]} />
-        </View>
-        <Text style={styles.muted}>A made-up score showing how this card will look.</Text>
-      </Card>
-
-      <SectionTitle title="Trends" />
-      {TREND_METRICS.map(id => {
-        const info = METRIC_INFO[id];
-        return (
-          <Card
-            key={id}
-            onPress={() => navigation.navigate(ROUTES.trend, {metricId: id})}
-            accessibilityLabel={`${info.title} trend`}>
-            <View style={styles.trendHead}>
-              <MaterialCommunityIcons name={info.icon} size={20} color={info.color} />
-              <Text style={styles.trendTitle}>{info.title}</Text>
-              <SampleBadge text="EXAMPLE" />
-            </View>
-            <MiniBars values={SAMPLE_SERIES[id]} labels={WEEK_LABELS} color={info.color} height={56} />
-          </Card>
-        );
-      })}
-
-      <SectionTitle title="Key insight" />
-      <Card accent={colors.primary}>
-        <SampleBadge />
-        <Text style={styles.cardTitle}>Example: movement and mood</Text>
-        <Text style={styles.muted}>
-          This is how a key insight could read, for instance "Your mood tends to be higher on days you
-          log exercise." It is not based on your data.
-        </Text>
-      </Card>
-
-      <SectionTitle
-        title="What affects your mood"
-        action="View all"
-        onAction={() => navigation.navigate(ROUTES.moodFactors)}
-      />
-      {FACTORS.slice(0, 3).map(f => (
-        <ListRow
-          key={f.id}
-          title={f.title}
-          subtitle={`Example: ${f.example}`}
-          icon={f.icon}
-          color={f.direction === 'positive' ? colors.green : colors.red}
-          onPress={() => navigation.navigate(ROUTES.factor, {factorId: f.id})}
+      {loaded && current && activeDays === 0 ? (
+        <EmptyState
+          icon="chart-line"
+          title="Nothing to show yet"
+          message={`You have not logged anything in the last ${RANGES[range].days} days. Insights are calculated only from what you log.`}
+          actionLabel="Start a check-in"
+          onAction={() => navigation.navigate(ROUTES.checkIn)}
         />
-      ))}
+      ) : null}
+
+      {current && activeDays > 0 ? (
+        <>
+          <Card>
+            <Text style={styles.cardTitle}>Last {RANGES[range].days} days</Text>
+            <View style={styles.stats}>
+              <Stat value={`${activeDays}`} label={`of ${RANGES[range].days} days logged`} />
+              <Stat value={`${entries}`} label="journal entries" />
+              <Stat value={moodSummary ? `${moodSummary.average}` : '-'} label="average mood" />
+            </View>
+          </Card>
+
+          <SectionTitle title="Trends" />
+          {trends.map(t => (
+            <Card
+              key={t.id}
+              onPress={() => navigation.navigate(ROUTES.trend, {metricId: t.id, range})}
+              accessibilityLabel={`${t.info.title} trend`}>
+              <View style={styles.trendHead}>
+                <MaterialCommunityIcons name={t.info.icon} size={20} color={t.info.color} />
+                <Text style={styles.trendTitle}>{t.info.title}</Text>
+                <Text style={styles.muted}>
+                  avg {t.summary.average} · {t.summary.count} {t.summary.count === 1 ? 'day' : 'days'}
+                </Text>
+              </View>
+              <MiniBars
+                values={bucketize(t.points, range).map(b => b.value)}
+                labels={bucketize(t.points, range).map(b => b.label)}
+                color={t.info.color}
+                height={56}
+                max={t.info.max}
+              />
+              {t.trend ? <Text style={[styles.muted, {marginTop: space.sm}]}>{TREND_TEXT[t.trend]}</Text> : null}
+            </Card>
+          ))}
+
+          {key ? (
+            <>
+              <SectionTitle title="Key insight" />
+              <Card accent={colors.primary}>
+                <Text style={styles.cardTitle}>
+                  {key.diff > 0 ? 'Higher' : 'Lower'} mood with {key.title.toLowerCase()}
+                </Text>
+                <Text style={styles.muted}>{factorSentence(key)}</Text>
+              </Card>
+            </>
+          ) : null}
+
+          <SectionTitle
+            title="What affects your mood"
+            action="View all"
+            onAction={() => navigation.navigate(ROUTES.moodFactors, {range})}
+          />
+          {ready.length === 0 ? (
+            <Note>
+              Factors appear once you have a mood and at least 3 days with and 3 days without a factor in this range.
+            </Note>
+          ) : (
+            ready.slice(0, 3).map(f => (
+              <ListRow
+                key={f.id}
+                title={f.title}
+                subtitle={`Mood ${f.withAvg} with vs ${f.withoutAvg} without`}
+                icon={f.icon}
+                color={f.diff >= 0 ? colors.green : colors.red}
+                onPress={() => navigation.navigate(ROUTES.factor, {factorId: f.id, range})}
+              />
+            ))
+          )}
+          <Note>These are associations in your own logs, not proof that one thing causes another.</Note>
+        </>
+      ) : null}
     </Screen>
   );
 };
 
+const Stat = ({value, label}) => (
+  <View style={styles.stat}>
+    <Text style={styles.statValue}>{value}</Text>
+    <Text style={styles.statLabel}>{label}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
   ranges: {flexDirection: 'row', flexWrap: 'wrap'},
   cardTitle: {color: colors.text, fontSize: 17, fontWeight: '700'},
-  muted: {color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: space.sm},
-  score: {color: colors.primary, fontSize: 44, fontWeight: '700', marginVertical: space.sm},
-  track: {height: 8, borderRadius: 4, backgroundColor: colors.surfaceAlt, overflow: 'hidden'},
-  fill: {height: 8, borderRadius: 4, backgroundColor: colors.primary},
+  muted: {color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: space.xs},
+  stats: {flexDirection: 'row', marginTop: space.md},
+  stat: {flex: 1, alignItems: 'center'},
+  statValue: {color: colors.primary, fontSize: 26, fontWeight: '700'},
+  statLabel: {color: colors.textMuted, fontSize: 12, marginTop: 2, textAlign: 'center'},
   trendHead: {flexDirection: 'row', alignItems: 'center', marginBottom: space.md},
   trendTitle: {color: colors.text, fontSize: 16, fontWeight: '600', flex: 1, marginLeft: space.sm},
 });

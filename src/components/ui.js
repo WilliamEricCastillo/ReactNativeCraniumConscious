@@ -119,12 +119,6 @@ export const Chip = ({label, selected, onPress}) => (
   </TouchableOpacity>
 );
 
-export const SampleBadge = ({text = 'EXAMPLE DATA'}) => (
-  <View style={styles.badge}>
-    <Text style={styles.badgeText}>{text}</Text>
-  </View>
-);
-
 export const Note = ({children}) => (
   <View style={styles.note}>
     <MaterialCommunityIcons name="information-outline" size={18} color={colors.textMuted} />
@@ -230,14 +224,21 @@ export const Stepper = ({value, onChange, step = 1, min = 0, max = 999, unit}) =
   </View>
 );
 
-// Simple native bar chart for clearly-labelled example data.
-export const MiniBars = ({values, labels, color = colors.primary, height = 90}) => {
-  const top = Math.max(...values, 1);
+// Simple native bar chart. A null value means "nothing logged" and shows a small grey stub, never a real bar.
+export const MiniBars = ({values, labels, color = colors.primary, height = 90, max}) => {
+  const top = max ?? Math.max(...values.map(v => v ?? 0), 1);
   return (
     <View style={[styles.bars, {height: height + 22}]}>
       {values.map((v, i) => (
         <View key={i} style={styles.barCol}>
-          <View style={[styles.bar, {height: Math.max(4, (v / top) * height), backgroundColor: color}]} />
+          <View
+            style={[
+              styles.bar,
+              v == null
+                ? {height: 4, backgroundColor: colors.border}
+                : {height: Math.max(4, (v / top) * height), backgroundColor: color},
+            ]}
+          />
           {labels ? <Text style={styles.barLabel}>{labels[i]}</Text> : null}
         </View>
       ))}
@@ -295,15 +296,6 @@ const styles = StyleSheet.create({
   },
   chipSelected: {backgroundColor: colors.primaryDeep, borderColor: colors.primary},
   chipText: {color: colors.textMuted, fontSize: 14, fontWeight: '600'},
-  badge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(251,191,36,0.15)',
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    marginBottom: space.sm,
-  },
-  badgeText: {color: colors.amber, fontSize: 11, fontWeight: '700', letterSpacing: 0.6},
   note: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceAlt,

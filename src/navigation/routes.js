@@ -4,7 +4,7 @@
 //   /(tabs)/you -> tab "you"          /add -> stack "add" (opened by the centre "+" tab)
 //   /log/<x> -> "log/<x>"             /journal/new -> "journal/new"      /day/[date] -> "day/[date]"
 //   /journal/[entryId] -> "journal/[entryId]" (param: entryId), and likewise for the other dynamic routes
-//   (factorId, metricId, date). Settings sub-pages follow the same naming ("you/settings/appearance", ...).
+//   (factorId, metricId, date). Settings sub-pages follow the same naming ("you/settings").
 export const ROUTES = {
   tabs: 'Tabs',
   today: 'today',
@@ -30,7 +30,6 @@ export const ROUTES = {
   journalNewPrompt: 'journal/new/prompt',
   journalEntry: 'journal/[entryId]',
   journalEdit: 'journal/[entryId]/edit',
-  legacyCalendar: 'journal/calendar',
 
   moodFactors: 'insights/mood-factors',
   factor: 'insights/factor/[factorId]',
@@ -44,10 +43,6 @@ export const ROUTES = {
   privacy: 'you/privacy',
   data: 'you/data',
   settings: 'you/settings',
-  appearance: 'you/settings/appearance',
-  notifications: 'you/settings/notifications',
-  units: 'you/settings/units',
-  weekStart: 'you/settings/week-start',
   about: 'you/about',
 
   day: 'day/[date]',

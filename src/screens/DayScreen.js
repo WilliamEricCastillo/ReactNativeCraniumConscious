@@ -3,8 +3,10 @@ import {View, Text, StyleSheet, TouchableOpacity, Alert} from 'react-native';
 
 import {Screen, Title, Card, Button, SectionTitle, EmptyState, Note} from '../components/ui';
 import useDaySnapshot from '../hooks/useDaySnapshot';
-import {deleteMetricEntry} from '../../services/data/dataService';
+import useAsyncData from '../hooks/useAsyncData';
+import {deleteMetricEntry, getPreferences} from '../../services/data/dataService';
 import {isValidISODate, formatLongDate, shiftISODate, todayISO} from '../utils/dates';
+import {formatWater} from '../utils/format';
 import {colors, moodOptions, space} from '../theme/theme';
 import {ROUTES} from '../navigation/routes';
 
@@ -22,8 +24,8 @@ const DayScreen = ({navigation, route}) => {
   const valid = isValidISODate(date);
   const isToday = valid && date === todayISO();
   const {snapshot, error, reload} = useDaySnapshot(valid ? date : todayISO());
+  const {data: prefs} = useAsyncData(getPreferences, null);
   const entries = snapshot?.journalEntries ?? [];
-  const checkIn = snapshot?.checkIn;
 
   const confirmRemove = (entry, text) =>
     Alert.alert('Remove this entry?', `${text} will be removed from this device.`, [
@@ -57,14 +59,17 @@ const DayScreen = ({navigation, route}) => {
   }
 
   const go = days => navigation.setParams({date: shiftISODate(date, days)});
+  const checkIn = snapshot?.checkIn;
+  const moodLabel = snapshot?.mood != null ? `${snapshot.mood}${snapshot.moodSource === 'journal' ? ' (from journal)' : ''}` : null;
+  // [label, shown value, screen that edits it, saved entry id that can be removed]
   const metricRows = [
-    ['Mood', checkIn?.mood ?? null],
-    ['Energy', checkIn?.energy ?? null],
-    ['Stress', checkIn?.stress ?? null],
-    ['Focus', checkIn?.focus ?? null],
-    ['Sleep', snapshot?.sleepHours != null ? `${snapshot.sleepHours} h` : null],
-    ['Exercise', snapshot?.exerciseMinutes != null ? `${snapshot.exerciseMinutes} min` : null],
-    ['Water', snapshot?.waterGlasses != null ? `${snapshot.waterGlasses} glasses` : null],
+    ['Mood', moodLabel, ROUTES.mood],
+    ['Energy', checkIn?.energy ?? null, ROUTES.energy],
+    ['Stress', checkIn?.stress ?? null, ROUTES.stress],
+    ['Focus', checkIn?.focus ?? null, ROUTES.focus],
+    ['Sleep', snapshot?.sleepHours != null ? `${snapshot.sleepHours} h` : null, ROUTES.sleep, snapshot?.metricEntryIds.sleep],
+    ['Exercise', snapshot?.exerciseMinutes != null ? `${snapshot.exerciseMinutes} min` : null, ROUTES.exercise, snapshot?.metricEntryIds.exercise],
+    ['Water', snapshot?.waterGlasses != null ? formatWater(snapshot.waterGlasses, prefs?.units.water) : null, ROUTES.water, snapshot?.metricEntryIds.water],
   ];
   const meals = snapshot?.meals ?? [];
   const customEntries = snapshot?.customEntries ?? [];
@@ -118,10 +123,25 @@ const DayScreen = ({navigation, route}) => {
       <SectionTitle title="Daily metrics" />
       {error ? <Note>Could not read saved data on this device.</Note> : null}
       <Card>
-        {metricRows.map(([label, value]) => (
+        {metricRows.map(([label, value, route, entryId]) => (
           <View key={label} style={styles.metricRow}>
-            <Text style={styles.muted}>{label}</Text>
-            <Text style={styles.body}>{value ?? 'Not logged'}</Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`${value == null ? 'Add' : 'Edit'} ${label}`}
+              onPress={() => navigation.navigate(route, {date})}
+              style={styles.metricTap}>
+              <Text style={styles.muted}>{label}</Text>
+              <Text style={[styles.body, value == null && {color: colors.primary}]}>{value ?? 'Add'}</Text>
+            </TouchableOpacity>
+            {entryId ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${label}`}
+                hitSlop={8}
+                onPress={() => confirmRemove({id: entryId}, `${label} ${value}`)}>
+                <Text style={styles.remove}>Remove</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ))}
       </Card>
@@ -161,6 +181,7 @@ const styles = StyleSheet.create({
   time: {color: colors.textMuted, fontSize: 14, marginBottom: space.xs},
   metricRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.xs},
   remove: {color: colors.red, fontSize: 14, fontWeight: '600', marginLeft: space.md},
+  metricTap: {flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 40},
 });
 
 export default DayScreen;

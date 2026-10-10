@@ -6,6 +6,8 @@ import {
   getReactNativePersistence,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   onAuthStateChanged,
   signOut,
 } from 'firebase/auth';
@@ -49,6 +51,8 @@ export {
   auth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   onAuthStateChanged,
   signOut,
 };

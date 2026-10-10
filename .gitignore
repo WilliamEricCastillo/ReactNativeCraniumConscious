@@ -28,7 +28,6 @@ pnpm-debug.log*
 .expo/
 dist/
 web-build/
-expo-env.d.ts
 
 # React Native bundles
 *.jsbundle

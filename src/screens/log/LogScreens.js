@@ -1,15 +1,18 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useState} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator} from 'react-native';
 
 import {Screen, Title, Card, Chip, Field, FormActions, ScaleSelector, Stepper, Note} from '../../components/ui';
 import {
   getDaySnapshot,
+  getCustomMetric,
+  getPreferences,
   saveDailyCheckIn,
   saveMetricEntry,
   logCustomMetricValue,
 } from '../../../services/data/dataService';
 import {DataValidationError} from '../../../services/data/models';
-import {todayISO} from '../../utils/dates';
+import {todayISO, isValidISODate, formatWeekdayDate} from '../../utils/dates';
+import {formatWater} from '../../utils/format';
 import {colors, metricColors, moodOptions, space, MIN_TOUCH} from '../../theme/theme';
 
 const MoodPicker = ({value, onChange}) => (
@@ -40,12 +43,19 @@ const Block = ({label, children}) => (
   </View>
 );
 
-// Loads today's saved values once, then renders the form so its inputs start from what is stored.
+// Loads the chosen day's saved values (route.params.date, never in the future; defaults to today) once, then renders
+// the form so its inputs start from what is stored.
 const withToday = Form => {
   const Wrapped = props => {
     const [snapshot, setSnapshot] = useState(null);
     const [failed, setFailed] = useState(false);
-    const date = todayISO();
+    const requested = props.route?.params?.date;
+    const today = todayISO();
+    const date = isValidISODate(requested) && requested <= today ? requested : today;
+
+    useLayoutEffect(() => {
+      if (date !== today) props.navigation.setOptions({headerTitle: formatWeekdayDate(date)});
+    }, [date, today, props.navigation]);
 
     useEffect(() => {
       let active = true;
@@ -214,12 +224,21 @@ export const ExerciseLogScreen = withToday(({navigation, snapshot, date}) => {
 
 export const WaterLogScreen = withToday(({navigation, snapshot, date}) => {
   const [glasses, setGlasses] = useState(snapshot.waterGlasses ?? 0);
+  const [unit, setUnit] = useState('glasses');
   const [saving, run] = useSaver(navigation);
+
+  useEffect(() => {
+    getPreferences()
+      .then(p => setUnit(p.units.water))
+      .catch(() => {});
+  }, []);
+
   return (
     <Screen>
-      <Title subtitle="Total glasses today">Water</Title>
+      <Title subtitle="Total glasses today (1 glass = 250 ml)">Water</Title>
       <Card>
         <Stepper value={glasses} onChange={setGlasses} step={1} min={0} max={40} unit="glasses" />
+        {unit !== 'glasses' ? <Text style={styles.equiv}>{formatWater(glasses, unit)}</Text> : null}
       </Card>
       <StorageNote />
       <FormActions
@@ -274,7 +293,43 @@ export const MealLogScreen = withToday(({navigation, date}) => {
   );
 });
 
-export const CustomMetricLogScreen = withToday(({navigation, date}) => {
+// Logs a value for an existing metric (route.params.metricId), using the input that fits its type.
+const DefinedMetricForm = ({metric, navigation, date}) => {
+  const [value, setValue] = useState(metric.valueType === 'number' ? '' : null);
+  const [saving, run] = useSaver(navigation);
+  const numeric = typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value));
+  const valid = metric.valueType === 'number' ? numeric : value != null;
+  const amount = metric.valueType === 'number' ? Number(value) : value;
+
+  return (
+    <Screen>
+      <Title subtitle={metric.unit ? `Unit: ${metric.unit}` : 'Log a value'}>{metric.name}</Title>
+      {metric.valueType === 'number' ? (
+        <Field label="Value" value={value} onChangeText={setValue} placeholder="e.g. 10" keyboardType="numeric" />
+      ) : null}
+      {metric.valueType === 'scale' ? (
+        <Card>
+          <ScaleSelector value={value} onChange={setValue} color={metricColors.custom} lowLabel="Low" highLabel="High" />
+        </Card>
+      ) : null}
+      {metric.valueType === 'boolean' ? (
+        <View style={styles.wrap}>
+          <Chip label="Yes" selected={value === 1} onPress={() => setValue(1)} />
+          <Chip label="No" selected={value === 0} onPress={() => setValue(0)} />
+        </View>
+      ) : null}
+      {typeof value === 'string' && value !== '' && !numeric ? <Text style={styles.error}>Value must be a number.</Text> : null}
+      <StorageNote />
+      <FormActions
+        saveDisabled={!valid || saving}
+        onCancel={() => navigation.goBack()}
+        onSave={() => run(() => saveMetricEntry({metricId: metric.id, date, value: amount}))}
+      />
+    </Screen>
+  );
+};
+
+const FreeMetricForm = ({navigation, date}) => {
   const [name, setName] = useState('');
   const [value, setValue] = useState('');
   const [unit, setUnit] = useState('');
@@ -297,6 +352,42 @@ export const CustomMetricLogScreen = withToday(({navigation, date}) => {
       />
     </Screen>
   );
+};
+
+export const CustomMetricLogScreen = withToday(({navigation, route, date}) => {
+  const metricId = route.params?.metricId;
+  const [metric, setMetric] = useState(metricId ? 'loading' : null);
+
+  useEffect(() => {
+    if (!metricId) return undefined;
+    let active = true;
+    getCustomMetric(metricId)
+      .then(found => active && setMetric(found && !found.archivedAt ? found : 'missing'))
+      .catch(() => active && setMetric('missing'));
+    return () => {
+      active = false;
+    };
+  }, [metricId]);
+
+  if (metric === 'loading') {
+    return (
+      <Screen scroll={false} contentStyle={{justifyContent: 'center'}}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </Screen>
+    );
+  }
+  if (metric === 'missing') {
+    return (
+      <Screen>
+        <Note>That metric no longer exists. Archived metrics cannot be logged.</Note>
+      </Screen>
+    );
+  }
+  return metric ? (
+    <DefinedMetricForm metric={metric} navigation={navigation} date={date} />
+  ) : (
+    <FreeMetricForm navigation={navigation} date={date} />
+  );
 });
 
 const styles = StyleSheet.create({
@@ -317,4 +408,5 @@ const styles = StyleSheet.create({
   blockLabel: {color: colors.textMuted, fontSize: 14, fontWeight: '600', marginBottom: space.sm},
   wrap: {flexDirection: 'row', flexWrap: 'wrap'},
   error: {color: colors.red, fontSize: 13, marginBottom: space.sm},
+  equiv: {color: colors.textMuted, textAlign: 'center', marginTop: space.sm, fontSize: 14},
 });

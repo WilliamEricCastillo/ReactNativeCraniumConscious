@@ -1,7 +1,8 @@
 # Cranium Conscious data schema and sync design
 
-Status: **local-first storage is active; Firestore sync is built but disabled.** Nothing in the app reads or writes
-Firestore today. None of this code has been run, tested or type-checked yet (static review only).
+Status: **local-first storage is active; Firestore sync is built, tested against an in-memory cloud, and disabled.** Nothing in the
+app reads or writes Firestore today. Tests: `npm test` (data layer, sync engine, rules compatibility) and `npm run test:rules`
+(Firestore rules against the local emulator; no live project is contacted).
 
 ## Local and cloud responsibilities
 
@@ -127,14 +128,19 @@ Device-generated ids are the document ids; deterministic ids for per-day records
 ## Security
 
 ### Rules and auth inspection
-- **No Firestore rules, `firebase.json` or `.firebaserc` are in this repository.** Whether the live project enforces uid ownership is **unverified**. Do not assume the legacy collection is protected.
+- **Rules are in the repo but not deployed:** `firestore.rules`, `firebase.json`, `firestore.indexes.json`. They were tested with `npm run test:rules`
+  (emulator, isolated tooling in `firebase/`): ownership, verified email, field allow-lists and ranges, increasing `rev`, no hard deletes, tombstones,
+  default deny, and the read-only legacy `JournalEntries` rule. `services/data/__tests__/rulesCompat.test.js` fails if a saved record uses a field the rules do not allow.
+  What the **live** project currently enforces is still **unverified**; no `.firebaserc` is committed so nothing can be deployed by accident.
 - Auth flow (`src/screens/LoginScreen.js`, `src/auth/AuthGate.js`, `services/firebaseconfig.js`): email/password sign-in and sign-up, state via `onAuthStateChanged`, persistence through AsyncStorage.
-  Gaps to address before relying on it: no email verification or password reset; sign-in errors are only logged, the user sees nothing;
-  the Firebase web API key is committed (not a secret by itself, but restrict it in the Firebase console).
-  Imports: `services/firebaseconfig.js` now takes `initializeApp`, auth and Firestore exclusively from the `firebase/*` entry points (previously a mix with `@firebase/*`); only one copy of each Firebase package is installed (firebase 10.12.2, @firebase/app 0.10.5, @firebase/auth 1.7.4, @firebase/firestore 4.6.3). It also tolerates a second evaluation (`auth/already-initialized`) during Fast Refresh.
+  Done: visible, non-enumerating error messages, password length and confirmation checks, verification email on sign-up, password reset, themed screen, no console logging.
+  Sync additionally requires a verified email (`getVerifiedUid`), and the rules require the same claim.
+  Still open: the Firebase web API key is committed (not a secret by itself, but restrict it in the Firebase console); enable App Check before production.
+  Imports: `services/firebaseconfig.js` takes `initializeApp`, auth and Firestore exclusively from the `firebase/*` entry points and tolerates a second evaluation (`auth/already-initialized`) during Fast Refresh.
 - **Local data is isolated per account.** `AuthGate` unmounts the app while the signed-in user changes, switches the local store to that user's key space (`v3/u/<uid>/...`), and remounts the tree keyed by uid, so one account never sees another's data or screen state. Operations started under a previous account fail (`ScopeChangedError`) instead of writing into the new one. Signed-out / auth-disabled data stays in the device scope (the original keys) and is never shown to or merged into an account. **Not yet built:** moving device-scope data (for example Phase 1 entries) into an account, and an export/clear flow for it.
+- **Claim and sync UI** exists on Data management, shown only when `AUTH_ENABLED` is true: account email, resend verification, "Link this phone's data" (with confirmation) and "Sync now".
 
-### Required rules (proposal only; not published, nothing existing was changed)
+### Rules summary (the real file is `firestore.rules`; the block below is the original proposal, kept for history)
 ```
 rules_version = '2';
 service cloud.firestore {
@@ -193,16 +199,18 @@ Single-key storage and corruption handling (replaced by per-record keys, unreada
 exercise type reset; unlogged water vs 0; read failures shown as empty (now explicit); calendar timezone (`America/Chicago`) vs local day; custom metric validation by type and locked type; unified metric ids (`meal`) with energy/stress/focus
 exposed through the metric API; route parameter lookups (own-property only); create-only guards, stricter validation, text length limit; stale previous-day data on the Day screen.
 
-## Unfinished work and what must happen before enabling sync
+## Go-live checklist (needs a human; nothing here has been done)
 
-1. Real Firestore rules in hand (or the proposal above), reviewed, tested in the emulator, published by a human; then set `FIRESTORE_RULES_VERIFIED = true`.
-2. Audit and decide the legacy `JournalEntries` data (unclaimed documents) as described above.
-3. UI for the claim step (explicit confirmation), sync status/errors, importing device-scope data into an account (with confirmation), and export/clear of device-scope data.
-4. Fix auth gaps (error messages, email verification, password reset).
-5. Exercise sync end to end on two devices with the emulator and a test account: offline edits, conflicts, deletes, resurrection, large histories, rapid edits during upload, interrupted uploads, clock skew.
-6. Decide retention of conflict copies, the local conflict log, and tombstones (the cloud tombstone and local `base` entries are never pruned yet).
-7. Not built: export, delete-all, reminder notifications, analytics, `schemaVersion` migrations beyond v1, background sync while the app is closed, a composite-index check for pulls, and drafts for non-journal forms.
-8. Run the type check and tests that were not run in this work.
+1. Review `firestore.rules`, run `npm run test:rules`, then publish it yourself (Firebase console > Firestore > Rules, or `firebase deploy --only firestore:rules` from a machine where you are logged in). Do this before any client writes.
+2. Firebase console > Authentication > Sign-in method: keep Email/Password on; under Settings add a password policy (min length 8), and customise the verification and reset email templates.
+3. Google Cloud console > APIs & Services > Credentials: restrict the web API key to the Android app (package + SHA-1) and the Identity Toolkit / Firestore APIs. Consider App Check (Play Integrity).
+4. Audit the legacy `JournalEntries` collection with admin tooling (counts, documents without `userID`, duplicates) and decide the unclaimed set. Never delete it.
+5. Create a test account with a real inbox, verify it, set the three flags in `src/config/features.js` to `true` **only in a dev build**, and exercise two devices: offline edits, conflicts, deletes, reinstall recovery.
+6. Only then set `FIRESTORE_RULES_VERIFIED = true` in the release build.
+
+## Still not built
+
+Moving device-scope data into an account, export and delete-all, background sync while the app is closed, retention of conflict copies / conflict log / tombstones (never pruned), `schemaVersion` migrations beyond v1, a composite-index review for new queries, and migration of legacy Firestore `JournalEntries` (plan above, not executed).
 
 ## Feature status
 
@@ -212,5 +220,5 @@ exposed through the metric API; route parameter lookups (own-property only); cre
 | Unsaved journal drafts | Local only, never uploaded |
 | Firestore reads and writes, claim, sync, legacy audit | Built, disabled, unexercised |
 | Legacy `JournalEntries` migration | Not executed; plan above |
-| Insights, trends, mood factors | Example data only |
+| Insights, trends, mood factors | Calculated from local records |
 | Firebase login/logout | Preserved behind `AUTH_ENABLED`; unchanged |

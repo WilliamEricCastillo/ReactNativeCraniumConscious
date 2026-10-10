@@ -2,11 +2,11 @@ import React, {useCallback, useState} from 'react';
 import {View, Text, StyleSheet, ActivityIndicator, Alert} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 
-import JournalEntryScreen from '../CalendarScreens/JournalEntryComponent';
+import JournalEntryScreen from './JournalEntryForm';
 import {Screen, Title, Card, Button, EmptyState, ListRow, SectionTitle} from '../../components/ui';
 import {getJournalEntry, deleteJournalEntry} from '../../../services/data/dataService';
 import {isValidISODate, todayISO, formatLongDate} from '../../utils/dates';
-import {PROMPT_CATEGORIES} from '../../data/sample';
+import {PROMPT_CATEGORIES} from '../../data/prompts';
 import {colors, moodOptions, space} from '../../theme/theme';
 import {ROUTES} from '../../navigation/routes';
 

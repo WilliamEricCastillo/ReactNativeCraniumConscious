@@ -6,11 +6,17 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {AUTH_ENABLED} from './src/config/features';
 import AppNavigator from './src/navigation/AppNavigator';
 import {startSyncScheduler} from './services/data/syncScheduler';
+import {initNotifications, syncRemindersOnLaunch} from './services/notifications';
 import {colors} from './src/theme/theme';
+
+initNotifications();
 
 const App = () => {
   // Registers nothing unless auth, cloud sync and verified rules are all enabled in src/config/features.js.
   useEffect(() => startSyncScheduler(), []);
+  useEffect(() => {
+    syncRemindersOnLaunch();
+  }, []);
 
   const app = <AppNavigator />;
 
