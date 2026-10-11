@@ -1,4 +1,5 @@
 import React from 'react';
+import {useCallback, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -7,10 +8,29 @@ import {
   TouchableOpacity,
   StyleSheet,
   Pressable,
+  PanResponder,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {LinearGradient} from 'expo-linear-gradient';
 import {colors, radius, space, MIN_TOUCH} from '../theme/theme';
+
+const SLIDER_PINK = '#F52BCB';
+const SLIDER_PURPLE = '#AC32F5';
+const SLIDER_BLUE = '#3985FF';
+
+const interpolateSliderColor = (startColor, endColor, amount) => {
+  const startChannels = [1, 3, 5].map(offset => parseInt(startColor.slice(offset, offset + 2), 16));
+  const endChannels = [1, 3, 5].map(offset => parseInt(endColor.slice(offset, offset + 2), 16));
+  const channels = startChannels.map((startChannel, index) =>
+    Math.round(startChannel + (endChannels[index] - startChannel) * amount).toString(16).padStart(2, '0'),
+  );
+  return `#${channels.join('')}`.toUpperCase();
+};
+
+const sliderColorAt = fraction => fraction <= 0.5
+  ? interpolateSliderColor(SLIDER_PINK, SLIDER_PURPLE, fraction * 2)
+  : interpolateSliderColor(SLIDER_PURPLE, SLIDER_BLUE, (fraction - 0.5) * 2);
 
 // `tab` screens have no native header, so they own the top inset; stack screens own the bottom one.
 export const Screen = ({children, tab = false, scroll = true, contentStyle}) => (
@@ -72,15 +92,23 @@ export const Button = ({title, onPress, variant = 'primary', icon, disabled, sty
         disabled && styles.buttonDisabled,
         style,
       ]}>
+      {primary ? (
+        <LinearGradient
+          colors={['#E63BBE', colors.primary, colors.blue]}
+          start={{x: 0, y: 0.5}}
+          end={{x: 1, y: 0.5}}
+          style={StyleSheet.absoluteFillObject}
+        />
+      ) : null}
       {icon ? (
         <MaterialCommunityIcons
           name={icon}
           size={20}
-          color={colors.text}
+          color={primary ? '#FFFFFF' : colors.text}
           style={{marginRight: space.sm}}
         />
       ) : null}
-      <Text style={[styles.buttonText, variant === 'ghost' && {color: colors.textMuted}]}>
+      <Text style={[styles.buttonText, primary && styles.buttonTextPrimary, variant === 'ghost' && {color: colors.textMuted}] }>
         {title}
       </Text>
     </TouchableOpacity>
@@ -187,7 +215,7 @@ export const ScaleSelector = ({value, onChange, max = 5, color = colors.primary,
               styles.scaleButton,
               selected && {backgroundColor: color, borderColor: color},
             ]}>
-            <Text style={[styles.scaleText, selected && {color: colors.bg}]}>{n}</Text>
+            <Text style={[styles.scaleText, selected && styles.scaleTextSelected]}>{n}</Text>
           </TouchableOpacity>
         );
       })}
@@ -200,6 +228,83 @@ export const ScaleSelector = ({value, onChange, max = 5, color = colors.primary,
     ) : null}
   </View>
 );
+
+export const RatingSlider = ({value, onChange, label, lowLabel, highLabel, min = 1, max = 10}) => {
+  const trackRef = useRef(null);
+  const [trackWidth, setTrackWidth] = useState(0);
+  const [trackLeft, setTrackLeft] = useState(0);
+  const fraction = value == null ? 0 : Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const positionColor = sliderColorAt(fraction);
+
+  const updateFromX = useCallback(pageX => {
+    if (!trackWidth) return;
+    const position = Math.max(0, Math.min(trackWidth, pageX - trackLeft));
+    onChange(Math.round(min + (position / trackWidth) * (max - min)));
+  }, [max, min, onChange, trackLeft, trackWidth]);
+
+  const responder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 4 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderGrant: event => updateFromX(event.nativeEvent.pageX),
+    onPanResponderMove: (_, gesture) => updateFromX(gesture.moveX),
+  }), [updateFromX]);
+
+  const onAccessibilityAction = event => {
+    const next = event.nativeEvent.actionName === 'increment' ? (value ?? min) + 1 : (value ?? min) - 1;
+    onChange(Math.max(min, Math.min(max, next)));
+  };
+
+  const marks = Array.from({length: max - min + 1}, (_, index) => min + index);
+
+  return (
+    <View>
+      <View
+        ref={trackRef}
+        style={styles.ratingSliderTouch}
+        onLayout={event => {
+          setTrackWidth(event.nativeEvent.layout.width);
+          trackRef.current?.measureInWindow(x => setTrackLeft(x));
+        }}
+        onTouchEnd={event => {
+          const touch = event.nativeEvent.changedTouches?.[0];
+          if (touch) updateFromX(touch.pageX);
+        }}
+        accessibilityRole="adjustable"
+        accessibilityLabel={label}
+        accessibilityValue={{min, max, now: value ?? undefined, text: value == null ? 'Not set' : `${value} of ${max}`}}
+        accessibilityActions={[{name: 'increment'}, {name: 'decrement'}]}
+        onAccessibilityAction={onAccessibilityAction}
+        {...responder.panHandlers}>
+        <View style={styles.ratingTrack}>
+          {value != null ? (
+            <LinearGradient
+              colors={[SLIDER_PINK, SLIDER_PURPLE, SLIDER_BLUE]}
+              locations={[0, 0.5, 1]}
+              start={{x: 0, y: 0.5}}
+              end={{x: 1, y: 0.5}}
+              style={[styles.ratingFill, {width: `${fraction * 100}%`}]}
+            />
+          ) : null}
+        </View>
+        <View style={[styles.ratingThumb, {left: `${fraction * 100}%`, borderColor: positionColor, shadowColor: positionColor}]} />
+        {value != null ? (
+          <View style={[styles.ratingValue, {left: `${fraction * 100}%`, backgroundColor: positionColor}]}>
+            <Text style={styles.ratingValueText}>{value}</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.ratingMarks}>
+        {marks.map(mark => <Text key={mark} style={styles.ratingMark}>{mark}</Text>)}
+      </View>
+      {lowLabel || highLabel ? (
+        <View style={styles.scaleLabels}>
+          <Text style={styles.rowSubtitle}>{lowLabel}</Text>
+          <Text style={styles.rowSubtitle}>{highLabel}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+};
 
 export const Stepper = ({value, onChange, step = 1, min = 0, max = 999, unit}) => (
   <View style={styles.stepper}>
@@ -247,7 +352,7 @@ export const MiniBars = ({values, labels, color = colors.primary, height = 90, m
 };
 
 const styles = StyleSheet.create({
-  screen: {flex: 1, backgroundColor: colors.bg},
+  screen: {flex: 1, backgroundColor: 'transparent'},
   content: {padding: space.lg, paddingBottom: space.xl * 2},
   title: {color: colors.text, fontSize: 28, fontWeight: '700'},
   subtitle: {color: colors.textMuted, fontSize: 15, marginTop: space.xs},
@@ -268,10 +373,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
   },
-  buttonPrimary: {backgroundColor: colors.primary},
-  buttonSecondary: {backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border},
+  buttonPrimary: {backgroundColor: 'transparent', overflow: 'hidden', borderRadius: radius.md},
+  buttonSecondary: {backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border},
   buttonDisabled: {opacity: 0.45},
   buttonText: {color: colors.text, fontSize: 16, fontWeight: '700'},
+  buttonTextPrimary: {color: '#FFFFFF'},
   actions: {flexDirection: 'row', marginTop: space.lg},
   sectionRow: {
     flexDirection: 'row',
@@ -294,7 +400,7 @@ const styles = StyleSheet.create({
     marginRight: space.sm,
     marginBottom: space.sm,
   },
-  chipSelected: {backgroundColor: colors.primaryDeep, borderColor: colors.primary},
+  chipSelected: {backgroundColor: colors.primary, borderColor: colors.primary},
   chipText: {color: colors.textMuted, fontSize: 14, fontWeight: '600'},
   note: {
     flexDirection: 'row',
@@ -352,7 +458,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   scaleText: {color: colors.text, fontSize: 16, fontWeight: '700'},
+  scaleTextSelected: {color: '#FFFFFF'},
   scaleLabels: {flexDirection: 'row', justifyContent: 'space-between', marginTop: space.sm},
+  ratingSliderTouch: {height: 54, justifyContent: 'center', marginHorizontal: 8},
+  ratingTrack: {height: 12, borderRadius: 6, backgroundColor: '#E7E6F4', overflow: 'hidden'},
+  ratingFill: {height: '100%', borderRadius: 6},
+  ratingThumb: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    marginLeft: -12,
+    borderRadius: 12,
+    borderWidth: 2,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#612A86',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.16,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  ratingValue: {
+    position: 'absolute',
+    top: 0,
+    minWidth: 34,
+    height: 28,
+    marginLeft: -17,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ratingValueText: {color: '#FFFFFF', fontSize: 14, fontWeight: '700'},
+  ratingMarks: {flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 4, marginTop: 2},
+  ratingMark: {flex: 1, textAlign: 'center', color: colors.textMuted, fontSize: 12, fontWeight: '600'},
   stepper: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center'},
   stepButton: {
     width: 56,

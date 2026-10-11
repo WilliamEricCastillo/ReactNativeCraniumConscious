@@ -49,7 +49,7 @@ export const SettingsScreen = () => {
       <Note>Used by the calendar and by weekly goals.</Note>
 
       <SectionTitle title="Appearance" />
-      <Text style={styles.body}>Dark theme. It is the only theme in this version.</Text>
+      <Text style={styles.body}>Light theme. It is the only theme in this version.</Text>
       <Note>{STORED}</Note>
     </Screen>
   );

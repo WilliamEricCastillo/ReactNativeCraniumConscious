@@ -25,6 +25,23 @@ export const PREFERENCES_ID = 'preferences';
 export const PROFILE_ID = 'profile';
 
 export const SCALE_UNIT = 'scale_1_5';
+export const RATING_SCALE_1_5 = 'scale_1_5';
+export const RATING_SCALE_1_10 = 'scale_1_10';
+export const CHECK_IN_RATINGS = ['energy', 'stress', 'focus'];
+
+export const ratingScaleFor = (record, dimension) =>
+  record?.ratingScales?.[dimension] === RATING_SCALE_1_10 ? RATING_SCALE_1_10 : RATING_SCALE_1_5;
+
+// Normalize historical 1-5 values to the shared 1-10 comparison scale without changing stored values.
+export const normalizeRating = (value, scale = RATING_SCALE_1_5) => {
+  if (value == null) return null;
+  return scale === RATING_SCALE_1_10 ? value : 1 + ((value - 1) * 9) / 4;
+};
+
+export const ratingSliderValue = (value, scale = RATING_SCALE_1_5) => {
+  const normalized = normalizeRating(value, scale);
+  return normalized == null ? null : Math.round(normalized);
+};
 
 // One glass of water in millilitres, used only to display water in ml or oz.
 export const GLASS_ML = 250;
@@ -33,9 +50,9 @@ export const GLASS_ML = 250;
 // exposed through the metric API; `daily: 'set'` means one record per day (deterministic id, upserted).
 export const BUILTIN_METRICS = {
   mood: {id: 'mood', name: 'Mood', unit: SCALE_UNIT, storage: 'checkIn'},
-  energy: {id: 'energy', name: 'Energy', unit: SCALE_UNIT, storage: 'checkIn'},
-  stress: {id: 'stress', name: 'Stress', unit: SCALE_UNIT, storage: 'checkIn'},
-  focus: {id: 'focus', name: 'Focus', unit: SCALE_UNIT, storage: 'checkIn'},
+  energy: {id: 'energy', name: 'Energy', unit: RATING_SCALE_1_10, storage: 'checkIn'},
+  stress: {id: 'stress', name: 'Stress', unit: RATING_SCALE_1_10, storage: 'checkIn'},
+  focus: {id: 'focus', name: 'Focus', unit: RATING_SCALE_1_10, storage: 'checkIn'},
   sleep: {id: 'sleep', name: 'Sleep', unit: 'hours', max: 24, storage: 'entry', daily: 'set'},
   exercise: {id: 'exercise', name: 'Exercise', unit: 'minutes', max: 1440, storage: 'entry', daily: 'set'},
   water: {id: 'water', name: 'Water', unit: 'glasses', max: 100, storage: 'entry', daily: 'set'},
@@ -64,7 +81,8 @@ export const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(obje
  *
  * @typedef {Meta & {
  *   id: string, date: string,
- *   mood: number|null, energy: number|null, stress: number|null, focus: number|null, scale: string
+ *   mood: number|null, energy: number|null, stress: number|null, focus: number|null, scale: string,
+ *   ratingScales?: {energy?: 'scale_1_10', stress?: 'scale_1_10', focus?: 'scale_1_10'}
  * }} DailyCheckIn
  *
  * @typedef {Meta & {
@@ -161,11 +179,26 @@ export const validateJournalInput = ({date, time, moodValue, journal, prompt}) =
 
 const CHECK_IN_FIELDS = ['mood', 'energy', 'stress', 'focus'];
 
-export const validateCheckInInput = ({date, ...values}) => {
+export const validateCheckInInput = ({date, ratingScales, ...values}) => {
   requireDate(date);
   if (!CHECK_IN_FIELDS.some(field => values[field] !== undefined)) fail('mood', 'Provide at least one value.');
-  CHECK_IN_FIELDS.forEach(field => {
-    if (values[field] != null && !isScale(values[field])) fail(field, `${field} must be a whole number from 1 to 5.`);
+  if (ratingScales != null) {
+    if (typeof ratingScales !== 'object' || Array.isArray(ratingScales) || Object.keys(ratingScales).some(field => !CHECK_IN_RATINGS.includes(field))) {
+      fail('ratingScales', 'Rating scale metadata is invalid.');
+    }
+    Object.entries(ratingScales).forEach(([field, scale]) => {
+      if (scale !== RATING_SCALE_1_10) fail(`ratingScales.${field}`, 'Unknown rating scale.');
+    });
+  }
+  if (values.mood != null && !isScale(values.mood)) fail('mood', 'mood must be a whole number from 1 to 5.');
+  CHECK_IN_RATINGS.forEach(field => {
+    const value = values[field];
+    if (value == null) return;
+    const scale = ratingScales?.[field];
+    const valid = scale === RATING_SCALE_1_10
+      ? Number.isInteger(value) && value >= 1 && value <= 10
+      : isScale(value);
+    if (!valid) fail(field, `${field} must be a whole number from 1 to ${scale === RATING_SCALE_1_10 ? 10 : 5}.`);
   });
 };
 

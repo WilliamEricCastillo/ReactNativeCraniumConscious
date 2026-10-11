@@ -97,12 +97,82 @@ describe('check-ins and mood', () => {
     expect(await ds.getDailyCheckIn(DAY)).toBeNull();
   });
 
+  test('supports marked 1-10 ratings while preserving untouched legacy raw values', async () => {
+    const {ds} = openApp();
+    await ds.saveDailyCheckIn({date: DAY, mood: 4, energy: 2, stress: 4, focus: 3});
+    await ds.saveDailyCheckIn({date: DAY, energy: 9, ratingScales: {energy: 'scale_1_10'}});
+
+    const stored = await ds.getDailyCheckIn(DAY);
+    expect(stored).toMatchObject({
+      mood: 4,
+      energy: 9,
+      stress: 4,
+      focus: 3,
+      scale: 'scale_1_5',
+      ratingScales: {energy: 'scale_1_10'},
+    });
+    expect(await ds.getMetricSeries({metricId: 'energy'})).toEqual([{date: DAY, value: 9, unit: 'scale_1_10'}]);
+    expect(await ds.getMetricSeries({metricId: 'stress'})).toEqual([{date: DAY, value: 7.75, unit: 'scale_1_10'}]);
+  });
+
+  test('requires an explicit scale marker for 1-10 values and accepts only integer bounds', async () => {
+    const {ds, models} = openApp();
+    await expect(ds.saveDailyCheckIn({date: DAY, energy: 6})).rejects.toBeInstanceOf(models.DataValidationError);
+    await expect(ds.saveDailyCheckIn({date: DAY, energy: 0, ratingScales: {energy: 'scale_1_10'}})).rejects.toBeInstanceOf(models.DataValidationError);
+    await expect(ds.saveDailyCheckIn({date: DAY, energy: 11, ratingScales: {energy: 'scale_1_10'}})).rejects.toBeInstanceOf(models.DataValidationError);
+    await expect(ds.saveDailyCheckIn({date: DAY, energy: 2.5, ratingScales: {energy: 'scale_1_10'}})).rejects.toBeInstanceOf(models.DataValidationError);
+    await expect(ds.saveDailyCheckIn({date: DAY, mood: 6, ratingScales: {energy: 'scale_1_10'}})).rejects.toBeInstanceOf(models.DataValidationError);
+  });
+
   test('mood saved through the metric API lands on the check-in only', async () => {
     const {ds} = openApp();
     await ds.saveMetricEntry({metricId: 'mood', date: DAY, value: 4});
     expect((await ds.getDailyCheckIn(DAY)).mood).toBe(4);
     expect(await ds.listMetricEntries()).toHaveLength(0);
     expect(await ds.getMetricSeries({metricId: 'mood'})).toEqual([{date: DAY, value: 4, unit: 'scale_1_5'}]);
+  });
+});
+
+describe('journal editor combined saves', () => {
+  test('saves journal, check-in, daily metrics and meals together without duplicate daily records', async () => {
+    const {ds} = openApp();
+    await ds.saveMetricEntry({metricId: 'water', date: DAY, value: 2});
+    const result = await ds.saveJournalAndTracking({
+      journal: {date: DAY, time: '09:00 AM', moodValue: 4, journal: 'A combined entry'},
+      checkIn: {date: DAY, energy: 8, ratingScales: {energy: 'scale_1_10'}},
+      metrics: [
+        {metricId: 'water', date: DAY, value: 5},
+        {metricId: 'sleep', date: DAY, value: 7.5},
+        {metricId: 'meal', date: DAY, value: 1, label: 'Oatmeal', category: 'breakfast'},
+        {metricId: 'meal', date: DAY, value: 1, label: 'Soup', category: 'lunch'},
+      ],
+    });
+
+    expect(result.journal).toMatchObject({journal: 'A combined entry', moodValue: 4});
+    expect(await ds.listJournalEntries({date: DAY})).toHaveLength(1);
+    expect((await ds.getDailyCheckIn(DAY))).toMatchObject({energy: 8, ratingScales: {energy: 'scale_1_10'}});
+    expect(await ds.listMetricEntries({date: DAY, metricId: 'water'})).toHaveLength(1);
+    expect((await ds.getDaySnapshot(DAY)).waterGlasses).toBe(5);
+    expect((await ds.getDaySnapshot(DAY)).meals.map(item => item.label)).toEqual(['Oatmeal', 'Soup']);
+  });
+
+  test('supports a stats-only save without creating an empty journal entry', async () => {
+    const {ds} = openApp();
+    await ds.saveJournalAndTracking({
+      checkIn: {date: DAY, focus: 6, ratingScales: {focus: 'scale_1_10'}},
+      metrics: [{metricId: 'water', date: DAY, value: 3}],
+    });
+    expect(await ds.listJournalEntries()).toHaveLength(0);
+    expect(await ds.getDailyCheckIn(DAY)).toMatchObject({focus: 6});
+    expect((await ds.getDaySnapshot(DAY)).waterGlasses).toBe(3);
+  });
+  test('journal-only save keeps journal mood separate from daily check-in mood', async () => {
+    const {ds} = openApp();
+    await ds.saveJournalAndTracking({
+      journal: {date: DAY, time: '09:00 AM', moodValue: 4, journal: 'Journal only'},
+    });
+    expect(await ds.listJournalEntries({date: DAY})).toHaveLength(1);
+    expect(await ds.getDailyCheckIn(DAY)).toBeNull();
   });
 });
 

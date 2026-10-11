@@ -1,11 +1,10 @@
 import React from 'react';
-import {View, Text, StyleSheet, TouchableOpacity} from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
+import {View, Text, StyleSheet, TouchableOpacity, ScrollView, Image} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {format, parseISO} from 'date-fns';
 
-import {Screen, Card, Button, SectionTitle, Note} from '../../components/ui';
-import BrainMark from '../../components/BrainMark';
+import {Card, Button} from '../../components/ui';
 import useAsyncData from '../../hooks/useAsyncData';
 import {
   getDaySnapshot,
@@ -16,8 +15,10 @@ import {
 import {greeting, todayISO, shiftISODate} from '../../utils/dates';
 import {formatWater, describeCustomEntries} from '../../utils/format';
 import {buildDays, patternInsightsForDays} from '../../utils/analytics';
-import {colors, metricColors, moodOptions, radius, space} from '../../theme/theme';
+import {metricColors, moodOptions, radius, space} from '../../theme/theme';
 import {ROUTES} from '../../navigation/routes';
+
+const mindImage = require('../../assets/mind.png');
 
 const loadToday = async () => {
   const today = todayISO();
@@ -52,6 +53,24 @@ const CHECK_IN_FIELDS = [
   {key: 'focus', label: 'Focus', color: metricColors.focus},
 ];
 
+const TodaySectionTitle = ({title, action, onAction}) => (
+  <View style={styles.sectionRow}>
+    <Text style={styles.sectionTitle} accessibilityRole="header">{title}</Text>
+    {action ? (
+      <TouchableOpacity onPress={onAction} hitSlop={12} accessibilityRole="button">
+        <Text style={styles.sectionAction}>{action}</Text>
+      </TouchableOpacity>
+    ) : null}
+  </View>
+);
+
+const TodayNote = ({children}) => (
+  <View style={styles.noteRow}>
+    <MaterialCommunityIcons name="information-outline" size={18} color={palette.muted} />
+    <Text style={styles.noteText}>{children}</Text>
+  </View>
+);
+
 const TodayScreen = ({navigation}) => {
   const {data, error} = useAsyncData(loadToday, null);
   const go = (route, params) => () => navigation.navigate(route, params);
@@ -77,24 +96,21 @@ const TodayScreen = ({navigation}) => {
   const customEntries = metricId => (snapshot?.customEntries ?? []).filter(e => e.metricId === metricId);
 
   return (
-    <Screen tab>
-      <LinearGradient
-        colors={['#1B1450', '#0F1330']}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 1}}
-        style={styles.hero}>
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <View style={styles.hero}>
         <View style={{flex: 1}}>
           <Text style={styles.greeting}>{greeting()}</Text>
           <Text style={styles.date}>{format(new Date(), 'EEEE, MMMM d')}</Text>
           <Text style={styles.tagline}>How is your mind today?</Text>
         </View>
-        <BrainMark width={150} height={90} />
-      </LinearGradient>
+        <Image source={mindImage} resizeMode="contain" style={styles.brainImage} />
+      </View>
 
-      {error ? <Note>Could not read saved data on this device. Nothing has been removed.</Note> : null}
+      {error ? <TodayNote>Could not read saved data on this device. Nothing has been removed.</TodayNote> : null}
 
       {data && patternDays.length > 0 ? (
-        <Card accent={colors.primary} style={{marginBottom: space.md}}>
+        <Card accent={palette.pink} style={styles.patternCard}>
           <Text style={styles.cardTitle}>A pattern we're noticing</Text>
           {recentPattern ? (
             <>
@@ -111,7 +127,7 @@ const TodayScreen = ({navigation}) => {
         </Card>
       ) : null}
 
-      <Card onPress={go(ROUTES.checkIn)} accessibilityLabel="Check-in">
+      <Card onPress={go(ROUTES.checkIn)} accessibilityLabel="Check-in" style={styles.lightCard}>
         <View style={styles.checkRow}>
           <Text style={styles.moodEmoji}>{mood ? mood.emoji : '🧠'}</Text>
           <View style={{flex: 1}}>
@@ -124,7 +140,7 @@ const TodayScreen = ({navigation}) => {
                 : 'How do you feel right now? Takes 10 seconds.'}
             </Text>
           </View>
-          <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textMuted} />
+          <MaterialCommunityIcons name="chevron-right" size={22} color={palette.muted} />
         </View>
         {loggedFields.length ? (
           <View style={styles.fieldRow}>
@@ -138,7 +154,7 @@ const TodayScreen = ({navigation}) => {
         ) : null}
       </Card>
 
-      <SectionTitle title="Log today" />
+      <TodaySectionTitle title="Log today" />
       <View style={styles.grid}>
         {isTracked('water') ? (
           <MetricCard
@@ -193,10 +209,11 @@ const TodayScreen = ({navigation}) => {
         <Text style={styles.link}>Choose what appears here</Text>
       </TouchableOpacity>
 
-      <SectionTitle title="Journal" />
+      <TodaySectionTitle title="Journal" />
       <Card
         onPress={journalToday.length ? go(ROUTES.journalEntry, {entryId: journalToday[journalToday.length - 1].id}) : undefined}
-        accessibilityLabel="Today's journal">
+        accessibilityLabel="Today's journal"
+        style={styles.lightCard}>
         {journalToday.length ? (
           <>
             <Text style={styles.cardTitle}>
@@ -215,13 +232,14 @@ const TodayScreen = ({navigation}) => {
           title="Write"
           icon="pencil-plus"
           onPress={go(ROUTES.journalNew, {date: todayISO()})}
+          variant="primary"
           style={{flex: 1}}
         />
         <View style={{width: space.sm}} />
-        <Button title="Use a prompt" variant="secondary" icon="lightbulb-on-outline" onPress={go(ROUTES.journalPrompts)} style={{flex: 1}} />
+        <Button title="Use a prompt" variant="primary" icon="lightbulb-on-outline" onPress={go(ROUTES.journalPrompts)} style={[{flex: 1}, styles.promptButton]} />
       </View>
 
-      <SectionTitle
+      <TodaySectionTitle
         title="This week"
         action="Calendar"
         onAction={() => navigation.navigate(ROUTES.tabs, {screen: ROUTES.journal, params: {view: 'calendar'}})}
@@ -241,36 +259,81 @@ const TodayScreen = ({navigation}) => {
         ))}
       </View>
       <Text style={styles.note}>Saved on this device only.</Text>
-    </Screen>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
+const palette = {
+  ink: '#151B3B',
+  muted: '#566482',
+  pink: '#E83EBD',
+  purple: '#8A45E8',
+  line: '#F0DDF0',
+  white: 'rgba(255,255,255,0.94)',
+};
+
 const styles = StyleSheet.create({
+  screen: {flex: 1, backgroundColor: 'transparent'},
+  content: {padding: space.lg, paddingBottom: space.xl * 2},
   hero: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: space.lg,
+    minHeight: 190,
+    paddingHorizontal: space.sm,
+    paddingTop: space.lg,
     marginBottom: space.lg,
   },
-  greeting: {color: colors.text, fontSize: 26, fontWeight: '700'},
-  date: {color: colors.textMuted, fontSize: 15, marginTop: 2},
-  tagline: {color: colors.primary, fontSize: 14, marginTop: space.md, fontWeight: '600'},
+  greeting: {color: palette.ink, fontSize: 29, fontWeight: '800'},
+  brainImage: {width: 150, height: 90},
+  date: {color: palette.muted, fontSize: 16, marginTop: 4},
+  tagline: {color: palette.pink, fontSize: 17, marginTop: space.lg, fontWeight: '700'},
+  lightCard: {
+    backgroundColor: palette.white,
+    borderColor: '#F4DDF0',
+    shadowColor: '#6D3F85',
+    shadowOffset: {width: 0, height: 5},
+    shadowOpacity: 0.10,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  patternCard: {
+    backgroundColor: 'rgba(255,248,254,0.96)',
+    borderColor: '#F2D8EF',
+    borderRadius: radius.lg,
+    shadowColor: '#A13B97',
+    shadowOffset: {width: 0, height: 5},
+    shadowOpacity: 0.10,
+    shadowRadius: 14,
+    elevation: 3,
+  },
   checkRow: {flexDirection: 'row', alignItems: 'center'},
   moodEmoji: {fontSize: 40, marginRight: space.lg},
-  cardTitle: {color: colors.text, fontSize: 18, fontWeight: '700'},
-  fieldRow: {flexDirection: 'row', marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space.md},
+  cardTitle: {color: palette.ink, fontSize: 18, fontWeight: '700'},
+  fieldRow: {flexDirection: 'row', marginTop: space.md, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: space.md},
   field: {flex: 1, alignItems: 'center'},
   fieldValue: {fontSize: 24, fontWeight: '700'},
   grid: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between'},
-  metricCard: {width: '48.5%', minHeight: 104},
-  metricValue: {color: colors.text, fontSize: 18, fontWeight: '700', marginTop: space.sm},
-  metricLabel: {color: colors.textMuted, fontSize: 13, marginTop: 2},
+  metricCard: {
+    width: '48.5%',
+    minHeight: 118,
+    backgroundColor: palette.white,
+    borderColor: '#E9E8F5',
+    shadowColor: '#53638C',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  metricValue: {color: palette.ink, fontSize: 18, fontWeight: '700', marginTop: space.sm},
+  metricLabel: {color: palette.muted, fontSize: 13, lineHeight: 19, marginTop: 2},
+  sectionRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.lg, marginBottom: space.md},
+  sectionTitle: {color: palette.ink, fontSize: 19, fontWeight: '800'},
+  sectionAction: {color: palette.pink, fontSize: 15, fontWeight: '700'},
   linkRow: {alignSelf: 'flex-start', minHeight: 40, justifyContent: 'center'},
-  link: {color: colors.primary, fontSize: 14, fontWeight: '600'},
+  link: {color: palette.purple, fontSize: 14, fontWeight: '700'},
   journalActions: {flexDirection: 'row'},
+  promptButton: {backgroundColor: palette.pink},
   week: {flexDirection: 'row', justifyContent: 'space-between'},
   weekDay: {
     flex: 1,
@@ -280,15 +343,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: '#E7E3F0',
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
-  weekDayToday: {borderColor: colors.primary, backgroundColor: colors.primarySoft},
-  weekLetter: {color: colors.textMuted, fontSize: 12, fontWeight: '600'},
-  weekNumber: {color: colors.text, fontSize: 17, fontWeight: '700', marginVertical: 2},
+  weekDayToday: {borderColor: palette.pink, backgroundColor: '#FFF0FA'},
+  weekLetter: {color: palette.muted, fontSize: 12, fontWeight: '600'},
+  weekNumber: {color: palette.ink, fontSize: 17, fontWeight: '700', marginVertical: 2},
   dot: {width: 6, height: 6, borderRadius: 3, backgroundColor: 'transparent'},
-  dotOn: {backgroundColor: colors.primary},
-  note: {color: colors.textMuted, fontSize: 12, marginTop: space.md},
+  dotOn: {backgroundColor: palette.pink},
+  note: {color: palette.muted, fontSize: 12, marginTop: space.md},
+  noteRow: {flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: radius.md, padding: space.md, marginVertical: space.md},
+  noteText: {color: palette.muted, fontSize: 13, lineHeight: 19, flex: 1, marginLeft: space.sm},
 });
 
 export default TodayScreen;

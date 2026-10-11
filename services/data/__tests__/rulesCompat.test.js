@@ -18,7 +18,10 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 const rules = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'firestore.rules'), 'utf8');
 const listFrom = text => [...text.matchAll(/'([A-Za-z]+)'/g)].map(m => m[1]);
 const common = listFrom(/function common\(\) \{\s*return \[([^\]]*)\]/.exec(rules)[1]);
-const allowed = fn => [...common, ...listFrom(new RegExp(`function ${fn}\\(d\\) \\{\\s*return d\\.keys\\(\\)\\.hasOnly\\(common\\(\\)\\.concat\\(\\[([^\\]]*)\\]\\)\\)`).exec(rules)[1])];
+const allowed = fn => {
+  const body = new RegExp(`function ${fn}\\([^)]*\\) \\{([\\s\\S]*?)\\n    \\}`).exec(rules)[1];
+  return [...common, ...listFrom(/common\(\)\.concat\(\[([^\]]*)\]\)/.exec(body)[1])];
+};
 
 const DAY = '2026-01-05';
 const CLOUD_ADDED = ['deleted', 'deviceId', 'serverUpdatedAt'];
@@ -29,7 +32,7 @@ test('records written by the app only use fields the rules allow', async () => {
 
   const metric = await ds.createCustomMetric({name: 'Reading', unit: 'pages'});
   await ds.createJournalEntry({date: DAY, time: '09:00 AM', moodValue: 4, journal: 'x', prompt: 'A prompt'});
-  await ds.saveDailyCheckIn({date: DAY, mood: 4, stress: 2});
+  await ds.saveDailyCheckIn({date: DAY, mood: 4, stress: 8, ratingScales: {stress: 'scale_1_10'}});
   await ds.saveMetricEntry({metricId: 'meal', date: DAY, value: 1, label: 'Oats', category: 'breakfast'});
   await ds.saveMetricEntry({metricId: metric.id, date: DAY, value: 12});
   await ds.setGoalByTitle('Sleep 7+ hours', true);

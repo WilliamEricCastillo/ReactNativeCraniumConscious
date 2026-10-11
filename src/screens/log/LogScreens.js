@@ -1,7 +1,8 @@
 import React, {useEffect, useLayoutEffect, useState} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator} from 'react-native';
+import {LinearGradient} from 'expo-linear-gradient';
 
-import {Screen, Title, Card, Chip, Field, FormActions, ScaleSelector, Stepper, Note} from '../../components/ui';
+import {Screen, Title, Card, Chip, Field, FormActions, ScaleSelector, RatingSlider, Stepper, Note} from '../../components/ui';
 import {
   getDaySnapshot,
   getCustomMetric,
@@ -10,12 +11,12 @@ import {
   saveMetricEntry,
   logCustomMetricValue,
 } from '../../../services/data/dataService';
-import {DataValidationError} from '../../../services/data/models';
+import {DataValidationError, RATING_SCALE_1_10, ratingScaleFor, ratingSliderValue} from '../../../services/data/models';
 import {todayISO, isValidISODate, formatWeekdayDate} from '../../utils/dates';
 import {formatWater} from '../../utils/format';
 import {colors, metricColors, moodOptions, space, MIN_TOUCH} from '../../theme/theme';
 
-const MoodPicker = ({value, onChange}) => (
+export const MoodPicker = ({value, onChange}) => (
   <View style={styles.moodRow}>
     {moodOptions.map(o => {
       const selected = value === o.value;
@@ -26,7 +27,10 @@ const MoodPicker = ({value, onChange}) => (
           accessibilityLabel={`Mood ${o.label}`}
           accessibilityState={{selected}}
           onPress={() => onChange(o.value)}
-          style={[styles.moodBtn, selected && {backgroundColor: o.color, borderColor: o.color}]}>
+          style={[styles.moodBtn, selected && styles.moodBtnSelected]}>
+          {selected ? (
+            <LinearGradient colors={['#E63BBE', colors.primary, colors.blue]} style={StyleSheet.absoluteFillObject} />
+          ) : null}
           <Text style={styles.moodEmoji}>{o.emoji}</Text>
         </TouchableOpacity>
       );
@@ -36,12 +40,15 @@ const MoodPicker = ({value, onChange}) => (
 
 const StorageNote = () => <Note>Saved on this device only.</Note>;
 
-const Block = ({label, children}) => (
-  <View style={{marginBottom: space.xl}}>
-    <Text style={styles.blockLabel}>{label}</Text>
-    {children}
-  </View>
-);
+const Block = ({label, children, card = false}) => {
+  const content = (
+    <>
+      <Text style={styles.blockLabel}>{label}</Text>
+      {children}
+    </>
+  );
+  return card ? <Card style={styles.checkInBlock}>{content}</Card> : <View style={{marginBottom: space.xl}}>{content}</View>;
+};
 
 // Loads the chosen day's saved values (route.params.date, never in the future; defaults to today) once, then renders
 // the form so its inputs start from what is stored.
@@ -108,50 +115,81 @@ const useSaver = navigation => {
 export const CheckInScreen = withToday(({navigation, snapshot, date}) => {
   const saved = snapshot.checkIn;
   const [mood, setMood] = useState(saved?.mood ?? null);
-  const [energy, setEnergy] = useState(saved?.energy ?? null);
-  const [stress, setStress] = useState(saved?.stress ?? null);
-  const [focus, setFocus] = useState(saved?.focus ?? null);
+  const [energy, setEnergy] = useState(ratingSliderValue(saved?.energy, ratingScaleFor(saved, 'energy')));
+  const [stress, setStress] = useState(ratingSliderValue(saved?.stress, ratingScaleFor(saved, 'stress')));
+  const [focus, setFocus] = useState(ratingSliderValue(saved?.focus, ratingScaleFor(saved, 'focus')));
+  const [changed, setChanged] = useState({});
   const [saving, run] = useSaver(navigation);
   const nothing = mood == null && energy == null && stress == null && focus == null;
+  const select = (field, setter) => value => {
+    setter(value);
+    setChanged(previous => ({...previous, [field]: true}));
+  };
+  const saveCheckIn = () => {
+    const values = {
+      mood: changed.mood ? mood : saved?.mood ?? null,
+      energy: changed.energy ? energy : saved?.energy ?? null,
+      stress: changed.stress ? stress : saved?.stress ?? null,
+      focus: changed.focus ? focus : saved?.focus ?? null,
+    };
+    const ratingScales = {...saved?.ratingScales};
+    ['energy', 'stress', 'focus'].forEach(field => {
+      if (changed[field]) ratingScales[field] = RATING_SCALE_1_10;
+    });
+    return saveDailyCheckIn({date, ...values, ...(Object.keys(ratingScales).length ? {ratingScales} : {})});
+  };
 
   return (
     <Screen>
       <Title subtitle="A quick snapshot of how you are right now">Check-in</Title>
-      <Block label="Mood">
-        <MoodPicker value={mood} onChange={setMood} />
+      <Block label="Mood" card>
+        <MoodPicker value={mood} onChange={select('mood', setMood)} />
       </Block>
-      <Block label="Energy">
-        <ScaleSelector value={energy} onChange={setEnergy} color={metricColors.energy} lowLabel="Drained" highLabel="Energized" />
+      <Block label="Energy" card>
+        <RatingSlider label="Energy" value={energy} onChange={select('energy', setEnergy)} lowLabel="Drained" highLabel="Energized" />
       </Block>
-      <Block label="Stress">
-        <ScaleSelector value={stress} onChange={setStress} color={metricColors.stress} lowLabel="Calm" highLabel="Overwhelmed" />
+      <Block label="Stress" card>
+        <RatingSlider label="Stress" value={stress} onChange={select('stress', setStress)} lowLabel="Calm" highLabel="Overwhelmed" />
       </Block>
-      <Block label="Focus">
-        <ScaleSelector value={focus} onChange={setFocus} color={metricColors.focus} lowLabel="Scattered" highLabel="Sharp" />
+      <Block label="Focus" card>
+        <RatingSlider label="Focus" value={focus} onChange={select('focus', setFocus)} lowLabel="Scattered" highLabel="Sharp" />
       </Block>
       {nothing ? <Text style={styles.error}>Select at least one value to save.</Text> : null}
       <StorageNote />
       <FormActions
         saveDisabled={nothing || saving}
         onCancel={() => navigation.goBack()}
-        onSave={() => run(() => saveDailyCheckIn({date, mood, energy, stress, focus}))}
+        onSave={() => run(saveCheckIn)}
       />
     </Screen>
   );
 });
 
-const makeScaleScreen = ({key, title, subtitle, color, low, high}) =>
+const makeScaleScreen = ({key, title, subtitle, low, high}) =>
   withToday(({navigation, snapshot, date}) => {
-    const [value, setValue] = useState(snapshot.checkIn?.[key] ?? null);
+    const isMood = key === 'mood';
+    const originalValue = snapshot.checkIn?.[key] ?? null;
+    const originalScale = ratingScaleFor(snapshot.checkIn, key);
+    const [value, setValue] = useState(isMood ? originalValue : ratingSliderValue(originalValue, originalScale));
+    const [changed, setChanged] = useState(false);
     const [saving, run] = useSaver(navigation);
+    const select = next => {
+      setValue(next);
+      setChanged(true);
+    };
+    const save = () => saveDailyCheckIn({
+      date,
+      [key]: changed || isMood ? value : originalValue,
+      ...(changed && !isMood ? {ratingScales: {[key]: RATING_SCALE_1_10}} : {}),
+    });
     return (
       <Screen>
         <Title subtitle={subtitle}>{title}</Title>
         <Card>
           {key === 'mood' ? (
-            <MoodPicker value={value} onChange={setValue} />
+            <MoodPicker value={value} onChange={select} />
           ) : (
-            <ScaleSelector value={value} onChange={setValue} color={color} lowLabel={low} highLabel={high} />
+            <RatingSlider label={title} value={value} onChange={select} lowLabel={low} highLabel={high} />
           )}
         </Card>
         {value == null ? <Text style={styles.error}>Select a value to save.</Text> : null}
@@ -159,16 +197,16 @@ const makeScaleScreen = ({key, title, subtitle, color, low, high}) =>
         <FormActions
           saveDisabled={value == null || saving}
           onCancel={() => navigation.goBack()}
-          onSave={() => run(() => saveDailyCheckIn({date, [key]: value}))}
+          onSave={() => run(save)}
         />
       </Screen>
     );
   });
 
-export const MoodLogScreen = makeScaleScreen({key: 'mood', title: 'Mood', subtitle: 'How are you feeling?', color: metricColors.mood});
-export const EnergyLogScreen = makeScaleScreen({key: 'energy', title: 'Energy', subtitle: 'How energized do you feel?', color: metricColors.energy, low: 'Drained', high: 'Energized'});
-export const StressLogScreen = makeScaleScreen({key: 'stress', title: 'Stress', subtitle: 'How stressed do you feel?', color: metricColors.stress, low: 'Calm', high: 'Overwhelmed'});
-export const FocusLogScreen = makeScaleScreen({key: 'focus', title: 'Focus', subtitle: 'How well can you concentrate?', color: metricColors.focus, low: 'Scattered', high: 'Sharp'});
+export const MoodLogScreen = makeScaleScreen({key: 'mood', title: 'Mood', subtitle: 'How are you feeling?'});
+export const EnergyLogScreen = makeScaleScreen({key: 'energy', title: 'Energy', subtitle: 'How energized do you feel?', low: 'Drained', high: 'Energized'});
+export const StressLogScreen = makeScaleScreen({key: 'stress', title: 'Stress', subtitle: 'How stressed do you feel?', low: 'Calm', high: 'Overwhelmed'});
+export const FocusLogScreen = makeScaleScreen({key: 'focus', title: 'Focus', subtitle: 'How well can you concentrate?', low: 'Scattered', high: 'Sharp'});
 
 export const SleepLogScreen = withToday(({navigation, snapshot, date}) => {
   const [hours, setHours] = useState(snapshot.sleepHours ?? 7);
@@ -403,9 +441,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  moodBtnSelected: {backgroundColor: 'transparent', borderColor: colors.primary, borderWidth: 2, elevation: 4, shadowColor: colors.primary, shadowOpacity: 0.24, shadowRadius: 8},
   moodEmoji: {fontSize: 26},
   blockLabel: {color: colors.textMuted, fontSize: 14, fontWeight: '600', marginBottom: space.sm},
+  checkInBlock: {marginBottom: space.md},
   wrap: {flexDirection: 'row', flexWrap: 'wrap'},
   error: {color: colors.red, fontSize: 13, marginBottom: space.sm},
   equiv: {color: colors.textMuted, textAlign: 'center', marginTop: space.sm, fontSize: 14},

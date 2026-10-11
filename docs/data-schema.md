@@ -11,7 +11,7 @@ app reads or writes Firestore today. Tests: `npm test` (data layer, sync engine,
 | Role | Persistent cache, offline support, and the only store while signed out | Permanent shared store for a signed-in user; cross-device sync |
 | Ownership | Device scope while signed out / auth disabled; a separate key space per signed-in account | `users/{uid}/...`, `uid` = verified Firebase Auth uid |
 | Works offline | Yes, always | No; changes queue locally and upload later |
-| Status | **Active** | **Disabled** (`AUTH_ENABLED`, `CLOUD_SYNC_ENABLED`, `FIRESTORE_RULES_VERIFIED` are all `false` in `src/config/features.js`) |
+| Status | **Active** | **Disabled** (`AUTH_ENABLED` is development-only; `CLOUD_SYNC_ENABLED` and `FIRESTORE_RULES_VERIFIED` remain `false` in `src/config/features.js`) |
 
 Both are kept. Local data is never replaced by the cloud, and the cloud is never written without a verified user.
 
@@ -38,7 +38,7 @@ Both are kept. Local data is never replaced by the cloud, and the cloud is never
   Conflict copies: `<id>_conflict_<rev>_<device>`. IDs match `[A-Za-z0-9_.-]{1,200}`.
 - Timestamps are ISO 8601 UTC strings (`createdAt`, `updatedAt`, `recordedAt`, `archivedAt`). `date` is a local calendar day `YYYY-MM-DD`.
 - Every record has `schemaVersion` (1), `createdAt`, `updatedAt`, and `rev` (integer, +1 on every local change; used for conflict detection).
-- Units are stored with every measurement. Scales are 1-5 (`scale_1_5`).
+- Units are stored with every measurement. Journal mood, check-in mood, and custom `scale` metrics use 1-5. Check-in Energy, Stress, and Focus use 1-10 for newly changed values; absent `ratingScales` markers preserve the historical 1-5 interpretation.
 - Never log record contents, tokens or Firestore error messages.
 
 ## Entities
@@ -50,7 +50,7 @@ Cloud paths are under `users/{uid}`. Local key: `@cranium-conscious/v3/rec/<coll
 | Profile | `profile` / `users/{uid}` (the user doc itself) | `id: "profile"`, `displayName` or null. No email stored |
 | Preferences | `settings` / `users/{uid}/settings/preferences` | `id: "preferences"`, `theme: "dark"`, `units {water: glasses|ml|oz, distance: km|mi}`, `weekStart`, `notifications {dailyReminders, weeklySummary}`, `trackedMetricIds[]` |
 | Journal entries | `journalEntries` | `date`, `time` (`hh:mm a` string), `moodValue` 1-5 (5 excellent ... 1 very negative), `journal` (required, at most 50000 chars), optional `prompt`, `source` (`app`, `legacy-local`, `legacy-firestore`, `conflict-copy`), `legacyDocId`, `conflictOf` |
-| Daily check-ins | `dailyCheckIns` | one per day (`checkin_<date>`): `mood`, `energy`, `stress`, `focus` (1-5 or null), `scale`. Saves merge per field (omitted keeps, null clears) |
+| Daily check-ins | `dailyCheckIns` | one per day (`checkin_<date>`): `mood` (1-5 or null), `energy`, `stress`, `focus` (1-5 legacy or 1-10 when marked, or null), `scale: "scale_1_5"`, optional `ratingScales` per-dimension markers. Saves merge per field (omitted keeps, null clears) |
 | Custom metrics | `customMetrics` | `name` (unique among active, at most 60), `unit`, `valueType` (`number|scale|boolean`; fixed once values exist), `archivedAt` (archived, never hard-deleted) |
 | Metric entries | `metricEntries` | `metricId`, `metricKind` (`builtin|custom`), `date`, `value`, `unit` (required), `recordedAt`, optional `label`, `category`, `note` |
 | Goals | `goals` | `title` (unique among active), `metricId`, `target {value, unit, period}` or null, `status` |
@@ -60,6 +60,12 @@ Metrics: `sleep` (hours, max 24), `exercise` (minutes, max 1440, optional `categ
 `meal` (1 per entry, `label` description, `category` meal type) and custom values append. **Mood, energy, stress and focus are stored on the daily
 check-in only** (one source of truth, no duplicates) but are saved and read through the same metric functions (`saveMetricEntry`, `getMetricSeries`).
 Custom values are validated against their definition (`scale` 1-5 integer, `boolean` 0/1).
+
+### Mixed historical check-in scales
+
+Each Energy, Stress, or Focus field in `ratingScales` may be marked `"scale_1_10"`. An absent marker means the stored raw value is historical 1-5. Mood always remains 1-5 (`scale: "scale_1_5"`). Opening a historical rating does not rewrite it; only moving its slider writes a 1-10 raw value and that dimension's marker. No local storage migration or bulk conversion is needed.
+
+Analytics normalize unmarked values at read time only with `normalized = 1 + (raw - 1) * 9 / 4`; marked 1-10 values are used unchanged. Thus 1-5 maps to 1, 3.25, 5.5, 7.75, 10 on the common comparison scale, and stored history remains raw. Stress thresholds are compared on this scale: calm is at or below 3.25 (legacy 1-2 of 5, new 1-3 of 10); high stress is at or above 7.75 (legacy 4-5 of 5, new 8-10 of 10).
 
 Device-only (never queued or uploaded): `drafts` (unsaved journal writing, so Back, a crash or a remount cannot lose it).
 
@@ -128,9 +134,8 @@ Device-generated ids are the document ids; deterministic ids for per-day records
 ## Security
 
 ### Rules and auth inspection
-- **Rules are in the repo but not deployed:** `firestore.rules`, `firebase.json`, `firestore.indexes.json`. They were tested with `npm run test:rules`
-  (emulator, isolated tooling in `firebase/`): ownership, verified email, field allow-lists and ranges, increasing `rev`, no hard deletes, tombstones,
-  default deny, and the read-only legacy `JournalEntries` rule. `services/data/__tests__/rulesCompat.test.js` fails if a saved record uses a field the rules do not allow.
+- **Rules are in the repo but not deployed:** `firestore.rules`, `firebase.json`, `firestore.indexes.json`. The proposed rules require verified ownership for account records and legacy `JournalEntries` reads; validate metadata, collection fields, built-in metric limits and custom metric definitions; preserve `createdAt` on updates; allow only content-free tombstones; and default-deny other paths. Tombstones may omit `createdAt` because the sync payload does so. Check-ins allow historical unmarked 1-5 ratings and marked 1-10 Energy, Stress and Focus; Mood remains 1-5.
+  They were tested with `npm run test:rules` against the isolated local emulator (33 tests); `services/data/__tests__/rulesCompat.test.js` checks fields on saved app records. These tests do not verify deployed project rules or live connectivity.
   What the **live** project currently enforces is still **unverified**; no `.firebaserc` is committed so nothing can be deployed by accident.
 - Auth flow (`src/screens/LoginScreen.js`, `src/auth/AuthGate.js`, `services/firebaseconfig.js`): email/password sign-in and sign-up, state via `onAuthStateChanged`, persistence through AsyncStorage.
   Done: visible, non-enumerating error messages, password length and confirmation checks, verification email on sign-up, password reset, themed screen, no console logging.
@@ -140,7 +145,7 @@ Device-generated ids are the document ids; deterministic ids for per-day records
 - **Local data is isolated per account.** `AuthGate` unmounts the app while the signed-in user changes, switches the local store to that user's key space (`v3/u/<uid>/...`), and remounts the tree keyed by uid, so one account never sees another's data or screen state. Operations started under a previous account fail (`ScopeChangedError`) instead of writing into the new one. Signed-out / auth-disabled data stays in the device scope (the original keys) and is never shown to or merged into an account. **Not yet built:** moving device-scope data (for example Phase 1 entries) into an account, and an export/clear flow for it.
 - **Claim and sync UI** exists on Data management, shown only when `AUTH_ENABLED` is true: account email, resend verification, "Link this phone's data" (with confirmation) and "Sync now".
 
-### Rules summary (the real file is `firestore.rules`; the block below is the original proposal, kept for history)
+### Historical rules sketch (not deployable; use `firestore.rules`)
 ```
 rules_version = '2';
 service cloud.firestore {
@@ -173,7 +178,7 @@ service cloud.firestore {
   }
 }
 ```
-Add per-collection field validation (types, ranges, sizes, immutable `createdAt`) and test with the Firebase emulator before publishing. Optionally require `request.auth.token.email_verified == true`.
+The sketch above predates the current per-collection validators and verified-email checks. Do not deploy it.
 
 ## Legacy data
 
@@ -201,11 +206,11 @@ exposed through the metric API; route parameter lookups (own-property only); cre
 
 ## Go-live checklist (needs a human; nothing here has been done)
 
-1. Review `firestore.rules`, run `npm run test:rules`, then publish it yourself (Firebase console > Firestore > Rules, or `firebase deploy --only firestore:rules` from a machine where you are logged in). Do this before any client writes.
+1. Review the complete `firestore.rules`, run `npm run test:rules`, then publish it yourself (Firebase console > Firestore > Rules, or `firebase deploy --only firestore:rules` from a machine where you are logged in). Confirm the target project before publishing and verify the deployed rules before any client writes. Do not deploy the historical sketch above.
 2. Firebase console > Authentication > Sign-in method: keep Email/Password on; under Settings add a password policy (min length 8), and customise the verification and reset email templates.
 3. Google Cloud console > APIs & Services > Credentials: restrict the web API key to the Android app (package + SHA-1) and the Identity Toolkit / Firestore APIs. Consider App Check (Play Integrity).
 4. Audit the legacy `JournalEntries` collection with admin tooling (counts, documents without `userID`, duplicates) and decide the unclaimed set. Never delete it.
-5. Create a test account with a real inbox, verify it, set the three flags in `src/config/features.js` to `true` **only in a dev build**, and exercise two devices: offline edits, conflicts, deletes, reinstall recovery.
+5. Create a test account with a real inbox and verify it. Auth is enabled automatically only in development builds. After manual rules deployment and verification, enable `CLOUD_SYNC_ENABLED` and `FIRESTORE_RULES_VERIFIED` **only in a dev build**, and exercise two devices: offline edits, conflicts, deletes, reinstall recovery. Explicitly claim local data only after reviewing the confirmation; claiming queues local records for upload.
 6. Only then set `FIRESTORE_RULES_VERIFIED = true` in the release build.
 
 ## Still not built

@@ -1,12 +1,13 @@
 import {parseISO, format} from 'date-fns';
 import {shiftISODate} from './dates';
+import {normalizeRating, ratingScaleFor} from '../../services/data/models';
 
 // Pure calculations over saved records. Nothing here invents data: days without a record stay null.
 
 export const SLEEP_TARGET_HOURS = 7;
 export const WATER_TARGET_GLASSES = 8;
-export const CALM_STRESS_MAX = 2;
-export const HIGH_STRESS_MIN = 4;
+export const CALM_STRESS_MAX = normalizeRating(2);
+export const HIGH_STRESS_MIN = normalizeRating(4);
 export const JOURNAL_GOAL_PER_WEEK = 3;
 export const MIN_DAYS_PER_GROUP = 3;
 
@@ -44,7 +45,7 @@ export const buildDays = ({checkIns = [], metricEntries = [], journalEntries = [
     const day = days.get(c.date);
     if (!day) return;
     ['mood', 'energy', 'stress', 'focus'].forEach(k => {
-      if (c[k] != null) day[k] = c[k];
+      if (c[k] != null) day[k] = k === 'mood' ? c[k] : normalizeRating(c[k], ratingScaleFor(c, k));
     });
     day.any = true;
   });
@@ -116,7 +117,7 @@ export const FACTOR_DEFS = [
   {id: 'sleep', title: 'Sleep', icon: 'sleep', withLabel: `${SLEEP_TARGET_HOURS}+ hours`, withoutLabel: 'Under 7 hours', test: d => (d.sleep == null ? null : d.sleep >= SLEEP_TARGET_HOURS)},
   {id: 'water', title: 'Water', icon: 'water-outline', withLabel: `${WATER_TARGET_GLASSES}+ glasses`, withoutLabel: 'Fewer glasses', test: d => (d.water == null ? null : d.water >= WATER_TARGET_GLASSES)},
   {id: 'meals', title: 'Meals', icon: 'food-apple-outline', withLabel: '3+ meals logged', withoutLabel: 'Fewer meals logged', test: d => d.meals >= 3},
-  {id: 'stress', title: 'High stress', icon: 'pulse', withLabel: `Stress ${HIGH_STRESS_MIN}+`, withoutLabel: 'Lower stress', test: d => (d.stress == null ? null : d.stress >= HIGH_STRESS_MIN)},
+  {id: 'stress', title: 'High stress', icon: 'pulse', withLabel: `Stress ${Math.ceil(HIGH_STRESS_MIN)}+`, withoutLabel: 'Lower stress', test: d => (d.stress == null ? null : d.stress >= HIGH_STRESS_MIN)},
 ];
 
 // Average mood on days with vs without each factor. `enough` is false until both groups have enough days.
@@ -333,7 +334,7 @@ export const GOAL_DEFS = {
   },
   'lower daily stress': {
     id: 'stress',
-    hint: 'Counts logged days with stress at 1 or 2 out of 5.',
+    hint: 'Counts normalized stress ratings through 3.25/10 (legacy 1-2 of 5; new ratings 1-3 of 10).',
     measure: days => {
       const logged = days.filter(d => d.stress != null);
       return {count: logged.filter(d => d.stress <= CALM_STRESS_MAX).length, of: logged.length, unit: 'logged days calm'};

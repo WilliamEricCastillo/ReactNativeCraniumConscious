@@ -21,6 +21,8 @@ import {
   validateGoalInput,
   validateReminderInput,
   validatePreferencesPatch,
+  normalizeRating,
+  ratingScaleFor,
 } from './models';
 import {transaction, listRecords, getRecord, upsertRecord, removeRecord, getStorageHealth} from './localStore';
 import {getSyncStatus as readSyncStatus, describeSyncStatus, claimLocalData, runSync} from './syncEngine';
@@ -62,21 +64,22 @@ export const getSyncStatus = async () => {
 
 // Journal entries
 
-export const createJournalEntry = async ({date, time, moodValue, journal, prompt}) =>
-  transaction(async tx => {
-    const entry = {
-      id: newId('journal'),
-      date,
-      time: time || format(new Date(), 'hh:mm a'),
-      moodValue,
-      journal,
-      ...(prompt ? {prompt} : {}),
-      source: 'app',
-      ...meta(null),
-    };
-    validateJournalInput(entry);
-    return createRecord(tx, COLLECTIONS.journalEntries, entry);
-  });
+const createJournalEntryTx = async (tx, {date, time, moodValue, journal, prompt}) => {
+  const entry = {
+    id: newId('journal'),
+    date,
+    time: time || format(new Date(), 'hh:mm a'),
+    moodValue,
+    journal,
+    ...(prompt ? {prompt} : {}),
+    source: 'app',
+    ...meta(null),
+  };
+  validateJournalInput(entry);
+  return createRecord(tx, COLLECTIONS.journalEntries, entry);
+};
+
+export const createJournalEntry = input => transaction(tx => createJournalEntryTx(tx, input));
 
 export const getJournalEntry = id => getRecord(COLLECTIONS.journalEntries, id);
 
@@ -104,24 +107,26 @@ export const clearJournalDraft = id => removeRecord(LOCAL_ONLY_COLLECTIONS.draft
 
 // Daily check-ins: one per day, merged field by field (undefined keeps, null clears).
 
-export const saveDailyCheckIn = async ({date, ...values}) => {
-  validateCheckInInput({date, ...values});
+const saveDailyCheckInTx = async (tx, {date, ratingScales = {}, ...values}) => {
+  validateCheckInInput({date, ratingScales, ...values});
   const id = `checkin_${date}`;
-  return transaction(async tx => {
-    const existing = await tx.get(COLLECTIONS.dailyCheckIns, id);
-    const pick = field => (values[field] !== undefined ? values[field] : existing?.[field] ?? null);
-    return tx.put(COLLECTIONS.dailyCheckIns, {
-      id,
-      date,
-      mood: pick('mood'),
-      energy: pick('energy'),
-      stress: pick('stress'),
-      focus: pick('focus'),
-      scale: SCALE_UNIT,
-      ...meta(existing),
-    });
+  const existing = await tx.get(COLLECTIONS.dailyCheckIns, id);
+  const pick = field => (values[field] !== undefined ? values[field] : existing?.[field] ?? null);
+  const scales = {...existing?.ratingScales, ...ratingScales};
+  return tx.put(COLLECTIONS.dailyCheckIns, {
+    id,
+    date,
+    mood: pick('mood'),
+    energy: pick('energy'),
+    stress: pick('stress'),
+    focus: pick('focus'),
+    scale: SCALE_UNIT,
+    ...(Object.keys(scales).length ? {ratingScales: scales} : {}),
+    ...meta(existing),
   });
 };
+
+export const saveDailyCheckIn = input => transaction(tx => saveDailyCheckInTx(tx, input));
 
 export const getDailyCheckIn = date => getRecord(COLLECTIONS.dailyCheckIns, `checkin_${date}`);
 
@@ -268,6 +273,16 @@ export const saveMetricEntry = async input => {
   return transaction(tx => saveMetricEntryTx(tx, input));
 };
 
+// Saves any combination of journal, check-in and metric records atomically without nesting public transactions.
+export const saveJournalAndTracking = ({journal = null, checkIn = null, metrics = []}) =>
+  transaction(async tx => {
+    const result = {journal: null, checkIn: null, metrics: []};
+    if (journal) result.journal = await createJournalEntryTx(tx, journal);
+    if (checkIn) result.checkIn = await saveDailyCheckInTx(tx, checkIn);
+    for (const metric of metrics) result.metrics.push(await saveMetricEntryTx(tx, metric));
+    return result;
+  });
+
 export const listMetricEntries = async ({date, metricId} = {}) => {
   const all = await listRecords(COLLECTIONS.metricEntries);
   return all
@@ -281,7 +296,13 @@ export const deleteMetricEntry = id => removeRecord(COLLECTIONS.metricEntries, i
 export const getMetricSeries = async ({metricId, from, to}) => {
   if (hasOwn(BUILTIN_METRICS, metricId) && BUILTIN_METRICS[metricId].storage === 'checkIn') {
     const checkIns = await listDailyCheckIns({from, to});
-    return checkIns.filter(c => c[metricId] != null).map(c => ({date: c.date, value: c[metricId], unit: SCALE_UNIT}));
+    return checkIns
+      .filter(c => c[metricId] != null)
+      .map(c => ({
+        date: c.date,
+        value: metricId === 'mood' ? c[metricId] : normalizeRating(c[metricId], ratingScaleFor(c, metricId)),
+        unit: BUILTIN_METRICS[metricId].unit,
+      }));
   }
   const entries = await listMetricEntries({metricId});
   return entries

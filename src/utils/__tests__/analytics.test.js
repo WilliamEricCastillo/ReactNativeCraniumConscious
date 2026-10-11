@@ -12,6 +12,8 @@ import {
   goalProgress,
   patternInsightsForDays,
 } from '../analytics';
+import {normalizeRating, ratingSliderValue} from '../../../services/data/models';
+import {METRIC_INFO} from '../../data/metrics';
 
 const checkIn = (date, values) => ({date, mood: null, energy: null, stress: null, focus: null, ...values});
 const entry = (date, metricId, value) => ({date, metricId, value});
@@ -55,9 +57,60 @@ describe('buildDays', () => {
   });
 
   test('counts meals and journal entries, and ignores records outside the range', () => {
-    expect(days[1]).toMatchObject({sleep: 7.5, meals: 2, stress: 2, journalCount: 1});
+    expect(days[1]).toMatchObject({sleep: 7.5, meals: 2, stress: 3.25, journalCount: 1});
     expect(days[2].journalCount).toBe(2);
     expect(days.some(d => d.water != null)).toBe(false);
+  });
+});
+
+describe('mixed check-in rating scales', () => {
+  test('uses the documented endpoint-preserving mapping and 1-10 chart ranges', () => {
+    expect([1, 2, 3, 4, 5].map(value => normalizeRating(value))).toEqual([1, 3.25, 5.5, 7.75, 10]);
+    expect([1, 2, 3, 4, 5].map(value => ratingSliderValue(value))).toEqual([1, 3, 6, 8, 10]);
+    expect(METRIC_INFO).toMatchObject({
+      mood: {max: 5, unit: 'scale 1-5'},
+      energy: {max: 10, unit: 'scale 1-10'},
+      stress: {max: 10, unit: 'scale 1-10'},
+      focus: {max: 10, unit: 'scale 1-10'},
+    });
+  });
+
+  test('normalizes legacy 1-5 readings at read time without changing their raw records', () => {
+    const legacy = checkIn('2026-01-01', {energy: 2, stress: 4, focus: 5});
+    const current = checkIn('2026-01-02', {
+      energy: 9,
+      stress: 8,
+      focus: 6,
+      ratingScales: {energy: 'scale_1_10', stress: 'scale_1_10', focus: 'scale_1_10'},
+    });
+    const days = buildDays({checkIns: [legacy, current]}, '2026-01-01', '2026-01-02');
+
+    expect(days.map(day => [day.energy, day.stress, day.focus])).toEqual([
+      [3.25, 7.75, 10],
+      [9, 8, 6],
+    ]);
+    expect(legacy).toMatchObject({energy: 2, stress: 4, focus: 5});
+    expect(current).toMatchObject({energy: 9, stress: 8, focus: 6});
+  });
+
+  test('stress associations and calm goals use equivalent cutoffs across scales', () => {
+    const dates = eachDate('2026-01-01', '2026-01-06');
+    const checkIns = dates.map((date, index) => {
+      const isCalm = index < 3;
+      const isLegacy = index === 0 || index === 2 || index === 3;
+      const stress = isCalm ? (isLegacy ? 2 : 3) : (isLegacy ? 4 : 8);
+      return checkIn(date, {
+        mood: index % 2 ? 4 : 2,
+        stress,
+        ...(isLegacy ? {} : {ratingScales: {stress: 'scale_1_10'}}),
+      });
+    });
+    const days = buildDays({checkIns}, dates[0], dates[5]);
+    const stressFactor = compareMoodByFactor(days).find(factor => factor.id === 'stress');
+
+    expect(stressFactor).toMatchObject({enough: true, withCount: 3, withoutCount: 3});
+    expect(stressFactor.withLabel).toBe('Stress 8+');
+    expect(goalProgress('Lower daily stress', days)).toMatchObject({count: 3, of: 6});
   });
 });
 

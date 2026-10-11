@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
-import {Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import {Alert, ImageBackground, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {
   auth,
@@ -15,6 +15,7 @@ import {colors, space} from '../theme/theme';
 
 const MIN_PASSWORD = 8;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const appBackground = require('../assets/background04.png');
 
 // Sign-in problems are described without revealing whether an account exists.
 const messageFor = error => {
@@ -47,6 +48,7 @@ const MODES = {
 };
 
 const LoginScreen = () => {
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -112,6 +114,9 @@ const LoginScreen = () => {
   };
 
   return (
+    <ImageBackground source={appBackground} resizeMode="cover" style={styles.background}>
+    <View pointerEvents="none" style={styles.backgroundVeil} />
+    <View pointerEvents="none" style={[styles.safeAreaCover, {height: insets.top}]} />
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -166,6 +171,7 @@ const LoginScreen = () => {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </ImageBackground>
   );
 };
 
@@ -176,7 +182,10 @@ const Link = ({label, onPress}) => (
 );
 
 const styles = StyleSheet.create({
-  screen: {flex: 1, backgroundColor: colors.bg},
+  background: {flex: 1},
+  backgroundVeil: {...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.70)'},
+  safeAreaCover: {position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.bg, zIndex: 1},
+  screen: {flex: 1, backgroundColor: 'transparent'},
   content: {padding: space.lg, paddingBottom: space.xl * 2},
   logo: {alignItems: 'center', marginVertical: space.lg},
   error: {color: colors.red, fontSize: 14, marginBottom: space.md},
