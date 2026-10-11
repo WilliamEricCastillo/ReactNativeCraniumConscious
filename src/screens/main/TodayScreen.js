@@ -4,7 +4,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {format, parseISO} from 'date-fns';
 
-import {Card, Button} from '../../components/ui';
+import {Card} from '../../components/ui';
 import useAsyncData from '../../hooks/useAsyncData';
 import {
   getDaySnapshot,
@@ -81,7 +81,6 @@ const TodayScreen = ({navigation}) => {
   const mood = moodOptions.find(m => m.value === snapshot?.mood);
   const checkIn = snapshot?.checkIn;
   const loggedFields = CHECK_IN_FIELDS.filter(f => isTracked(f.key));
-  const journalToday = snapshot?.journalEntries ?? [];
   const waterUnit = data?.preferences.units.water;
 
   const week = data
@@ -127,19 +126,20 @@ const TodayScreen = ({navigation}) => {
         </Card>
       ) : null}
 
-      <Card onPress={go(ROUTES.checkIn)} accessibilityLabel="Check-in" style={styles.lightCard}>
+      <Card onPress={go(ROUTES.checkIn)} accessibilityLabel="Daily Check-in. Check in now" style={styles.lightCard}>
         <View style={styles.checkRow}>
           <Text style={styles.moodEmoji}>{mood ? mood.emoji : '🧠'}</Text>
           <View style={{flex: 1}}>
-            <Text style={styles.cardTitle}>{mood ? `Feeling ${mood.label.toLowerCase()}` : 'Check in'}</Text>
+            <Text style={styles.cardTitle}>Daily Check-in</Text>
             <Text style={styles.metricLabel}>
               {mood
                 ? snapshot.moodSource === 'journal'
-                  ? 'Mood from your journal. Tap to check in.'
-                  : 'Tap to update your check-in'
+                  ? `Feeling ${mood.label.toLowerCase()} from your journal`
+                  : `Feeling ${mood.label.toLowerCase()}`
                 : 'How do you feel right now? Takes 10 seconds.'}
             </Text>
           </View>
+          <Text style={styles.checkInAction}>Check in now</Text>
           <MaterialCommunityIcons name="chevron-right" size={22} color={palette.muted} />
         </View>
         {loggedFields.length ? (
@@ -154,7 +154,11 @@ const TodayScreen = ({navigation}) => {
         ) : null}
       </Card>
 
-      <TodaySectionTitle title="Log today" />
+      <TodaySectionTitle
+        title="Log today"
+        action="Browse all tracking"
+        onAction={go(ROUTES.add, {date: todayISO(), expandedMetricId: null})}
+      />
       <View style={styles.grid}>
         {isTracked('water') ? (
           <MetricCard
@@ -162,7 +166,7 @@ const TodayScreen = ({navigation}) => {
             color={metricColors.water}
             label="Water"
             value={formatWater(snapshot?.waterGlasses ?? 0, waterUnit)}
-            onPress={go(ROUTES.water)}
+            onPress={go(ROUTES.add, {date: todayISO(), expandedMetricId: 'water'})}
           />
         ) : null}
         {isTracked('sleep') ? (
@@ -171,7 +175,7 @@ const TodayScreen = ({navigation}) => {
             color={metricColors.sleep}
             label="Sleep"
             value={snapshot?.sleepHours != null ? `${snapshot.sleepHours} h` : 'Not logged'}
-            onPress={go(ROUTES.sleep)}
+            onPress={go(ROUTES.add, {date: todayISO(), expandedMetricId: 'sleep'})}
           />
         ) : null}
         {isTracked('exercise') ? (
@@ -180,7 +184,7 @@ const TodayScreen = ({navigation}) => {
             color={metricColors.exercise}
             label="Exercise"
             value={snapshot?.exerciseMinutes != null ? `${snapshot.exerciseMinutes} min` : 'Not logged'}
-            onPress={go(ROUTES.exercise)}
+            onPress={go(ROUTES.add, {date: todayISO(), expandedMetricId: 'exercise'})}
           />
         ) : null}
         {isTracked('meal') ? (
@@ -189,7 +193,7 @@ const TodayScreen = ({navigation}) => {
             color={metricColors.meal}
             label="Meals"
             value={`${snapshot?.meals.length ?? 0} logged`}
-            onPress={go(ROUTES.meal)}
+            onPress={go(ROUTES.add, {date: todayISO(), expandedMetricId: 'meal'})}
           />
         ) : null}
         {(data?.customMetrics ?? [])
@@ -201,43 +205,13 @@ const TodayScreen = ({navigation}) => {
               color={metricColors.custom}
               label={m.name}
               value={describeCustomEntries(m, customEntries(m.id))}
-              onPress={go(ROUTES.customMetric, {metricId: m.id})}
+              onPress={go(ROUTES.add, {date: todayISO(), expandedMetricId: m.id})}
             />
           ))}
       </View>
       <TouchableOpacity onPress={go(ROUTES.metrics)} accessibilityRole="button" style={styles.linkRow}>
         <Text style={styles.link}>Choose what appears here</Text>
       </TouchableOpacity>
-
-      <TodaySectionTitle title="Journal" />
-      <Card
-        onPress={journalToday.length ? go(ROUTES.journalEntry, {entryId: journalToday[journalToday.length - 1].id}) : undefined}
-        accessibilityLabel="Today's journal"
-        style={styles.lightCard}>
-        {journalToday.length ? (
-          <>
-            <Text style={styles.cardTitle}>
-              {journalToday.length} {journalToday.length === 1 ? 'entry' : 'entries'} today
-            </Text>
-            <Text style={[styles.metricLabel, {marginTop: space.xs}]} numberOfLines={2}>
-              {journalToday[journalToday.length - 1].journal}
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.metricLabel}>Nothing written yet today.</Text>
-        )}
-      </Card>
-      <View style={styles.journalActions}>
-        <Button
-          title="Write"
-          icon="pencil-plus"
-          onPress={go(ROUTES.journalNew, {date: todayISO()})}
-          variant="primary"
-          style={{flex: 1}}
-        />
-        <View style={{width: space.sm}} />
-        <Button title="Use a prompt" variant="primary" icon="lightbulb-on-outline" onPress={go(ROUTES.journalPrompts)} style={[{flex: 1}, styles.promptButton]} />
-      </View>
 
       <TodaySectionTitle
         title="This week"
@@ -310,6 +284,7 @@ const styles = StyleSheet.create({
   checkRow: {flexDirection: 'row', alignItems: 'center'},
   moodEmoji: {fontSize: 40, marginRight: space.lg},
   cardTitle: {color: palette.ink, fontSize: 18, fontWeight: '700'},
+  checkInAction: {color: palette.purple, fontSize: 13, fontWeight: '700', marginRight: space.xs},
   fieldRow: {flexDirection: 'row', marginTop: space.md, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: space.md},
   field: {flex: 1, alignItems: 'center'},
   fieldValue: {fontSize: 24, fontWeight: '700'},
@@ -332,8 +307,6 @@ const styles = StyleSheet.create({
   sectionAction: {color: palette.pink, fontSize: 15, fontWeight: '700'},
   linkRow: {alignSelf: 'flex-start', minHeight: 40, justifyContent: 'center'},
   link: {color: palette.purple, fontSize: 14, fontWeight: '700'},
-  journalActions: {flexDirection: 'row'},
-  promptButton: {backgroundColor: palette.pink},
   week: {flexDirection: 'row', justifyContent: 'space-between'},
   weekDay: {
     flex: 1,

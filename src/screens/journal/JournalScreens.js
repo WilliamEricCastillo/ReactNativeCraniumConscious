@@ -15,6 +15,7 @@ const safeDate = value => (isValidISODate(value) ? value : todayISO());
 export const JournalNewScreen = ({navigation, route}) => (
   <JournalEntryScreen
     route={{params: {date: safeDate(route.params?.date)}}}
+    onWritingModeChange={active => navigation.setOptions({headerShown: !active})}
     onClose={() => navigation.goBack()}
   />
 );

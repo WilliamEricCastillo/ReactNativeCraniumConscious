@@ -33,12 +33,14 @@ const sliderColorAt = fraction => fraction <= 0.5
   : interpolateSliderColor(SLIDER_PURPLE, SLIDER_BLUE, (fraction - 0.5) * 2);
 
 // `tab` screens have no native header, so they own the top inset; stack screens own the bottom one.
-export const Screen = ({children, tab = false, scroll = true, contentStyle}) => (
+export const Screen = ({children, tab = false, scroll = true, contentStyle, scrollRef, onContentSizeChange}) => (
   <SafeAreaView
     style={styles.screen}
     edges={tab ? ['top'] : ['bottom', 'left', 'right']}>
     {scroll ? (
       <ScrollView
+        ref={scrollRef}
+        onContentSizeChange={onContentSizeChange}
         contentContainerStyle={[styles.content, contentStyle]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
@@ -116,9 +118,9 @@ export const Button = ({title, onPress, variant = 'primary', icon, disabled, sty
 };
 
 // Standard Save / Cancel pair used by every logging form.
-export const FormActions = ({onSave, onCancel, saveDisabled, saveTitle = 'Save'}) => (
+export const FormActions = ({onSave, onCancel, saveDisabled, cancelDisabled, saveTitle = 'Save'}) => (
   <View style={styles.actions}>
-    <Button title="Cancel" variant="secondary" onPress={onCancel} style={{flex: 1}} />
+    <Button title="Cancel" variant="secondary" onPress={onCancel} disabled={cancelDisabled} style={{flex: 1}} />
     <View style={{width: space.md}} />
     <Button title={saveTitle} onPress={onSave} disabled={saveDisabled} style={{flex: 1}} />
   </View>
@@ -165,9 +167,11 @@ export const EmptyState = ({icon = 'brain', title, message, actionLabel, onActio
   </View>
 );
 
-export const ListRow = ({icon, title, subtitle, onPress, color = colors.primary, right}) => (
+export const ListRow = ({icon, title, subtitle, onPress, color = colors.primary, right, disabled, expanded}) => (
   <Pressable
     onPress={onPress}
+    disabled={disabled}
+    accessibilityState={{disabled: !!disabled, ...(expanded != null ? {expanded} : {})}}
     accessibilityRole="button"
     accessibilityLabel={subtitle ? `${title}. ${subtitle}` : title}
     android_ripple={{color: colors.primarySoft}}

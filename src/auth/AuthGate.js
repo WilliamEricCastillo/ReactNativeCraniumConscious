@@ -1,24 +1,27 @@
 import React, {useEffect, useState} from 'react';
+import {ActivityIndicator, ImageBackground, StyleSheet, View} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
 import {auth, onAuthStateChanged} from '../../services/firebaseconfig';
 import {setActiveScope} from '../../services/data/localStore';
+import {colors} from '../theme/theme';
 import LoginScreen from '../screens/LoginScreen';
 
 const Stack = createNativeStackNavigator();
+const appBackground = require('../assets/background04.png');
 
 // Original Firebase login gate. Only loaded when AUTH_ENABLED is true (see src/config/features.js).
 // It also isolates local data per account: the app tree is unmounted while the signed-in user changes,
 // the local store is switched to that user's key space, and the tree is remounted fresh (keyed by uid), so
 // one account can never see another account's data or leftover screen state.
 const AuthGate = ({children}) => {
-  const [session, setSession] = useState({ready: false, uid: null});
+  const [session, setSession] = useState({ready: true, uid: null});
 
   useEffect(() => {
     let active = true;
     const unsubscribe = onAuthStateChanged(auth, async user => {
-      setSession({ready: false, uid: null});
+      setSession(current => (current.uid ? {ready: false, uid: null} : current));
       let uid = user ? user.uid : null;
       try {
         await setActiveScope(uid);
@@ -27,7 +30,9 @@ const AuthGate = ({children}) => {
         uid = null;
         await setActiveScope(null).catch(() => {});
       }
-      if (active) setSession({ready: true, uid});
+      if (active) {
+        setSession({ready: true, uid});
+      }
     });
     return () => {
       active = false;
@@ -36,7 +41,12 @@ const AuthGate = ({children}) => {
   }, []);
 
   if (!session.ready) {
-    return null;
+    return (
+      <ImageBackground source={appBackground} resizeMode="cover" style={styles.loading}>
+        <View pointerEvents="none" style={styles.veil} />
+        <ActivityIndicator color={colors.primary} size="large" />
+      </ImageBackground>
+    );
   }
 
   if (session.uid) {
@@ -51,5 +61,10 @@ const AuthGate = ({children}) => {
     </NavigationContainer>
   );
 };
+
+const styles = StyleSheet.create({
+  loading: {flex: 1, alignItems: 'center', justifyContent: 'center'},
+  veil: {...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.70)'},
+});
 
 export default AuthGate;

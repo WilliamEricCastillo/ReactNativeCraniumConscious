@@ -10,13 +10,16 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  Keyboard,
+  BackHandler,
+  ImageBackground,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {format, parse, parseISO} from 'date-fns';
 import {Calendar} from 'react-native-calendars';
-import {Button, Card, Chip, Field, RatingSlider, ScaleSelector, Stepper} from '../../components/ui';
-import {MoodPicker} from '../log/LogScreens';
+import {Button, Card, Chip, Field, ScaleSelector, Stepper} from '../../components/ui';
 import {
   saveJournalAndTracking,
   updateJournalEntry,
@@ -28,12 +31,13 @@ import {
   clearJournalDraft,
   journalDraftId,
 } from '../../../services/data/dataService';
-import {DataValidationError, MAX_JOURNAL_LENGTH, RATING_SCALE_1_10, ratingScaleFor, ratingSliderValue} from '../../../services/data/models';
+import {DataValidationError, MAX_JOURNAL_LENGTH} from '../../../services/data/models';
 import {formatLongDate, todayISO} from '../../utils/dates';
 import {formatWater} from '../../utils/format';
 import {colors, metricColors, moodOptions, radius, space, MIN_TOUCH} from '../../theme/theme';
 
 const editColors = {ink: '#151B3B', muted: '#566482', pink: '#E83EBD'};
+const appBackground = require('../../assets/background04.png');
 const EXERCISE_TYPES = ['Walk', 'Run', 'Strength', 'Yoga', 'Other'];
 const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 
@@ -63,7 +67,6 @@ const TrackingSections = ({
   expanded,
   toggle,
   values,
-  setCheckIn,
   setMetric,
   setMeal,
   meal,
@@ -74,24 +77,6 @@ const TrackingSections = ({
   ready,
 }) => (
   <View style={styles.trackingSections}>
-    <TrackingSection title="Check-in" description="Mood, energy, stress and focus" icon="emoticon-outline" color={metricColors.mood} expanded={expanded.checkIn} onToggle={() => toggle('checkIn')} disabled={!ready}>
-      <Text style={styles.blockLabel}>Mood</Text>
-      <MoodPicker value={values.checkInMood} onChange={value => setCheckIn('mood', value)} />
-      {['energy', 'stress', 'focus'].map((field, index) => {
-        const config = [
-          {title: 'Energy', low: 'Drained', high: 'Energized', color: metricColors.energy},
-          {title: 'Stress', low: 'Calm', high: 'Overwhelmed', color: metricColors.stress},
-          {title: 'Focus', low: 'Scattered', high: 'Sharp', color: metricColors.focus},
-        ][index];
-        return (
-          <View key={field} style={styles.trackingInputGroup}>
-            <Text style={styles.blockLabel}>{config.title}</Text>
-            <RatingSlider label={config.title} value={values[field]} onChange={value => setCheckIn(field, value)} lowLabel={config.low} highLabel={config.high} />
-          </View>
-        );
-      })}
-    </TrackingSection>
-
     <TrackingSection title="Water" description="Glasses of water" icon="water-outline" color={metricColors.water} expanded={expanded.water} onToggle={() => toggle('water')} disabled={!ready}>
       <Stepper value={values.water} onChange={value => setMetric('water', {value})} unit="glasses" max={40} />
       {preferences?.units?.water && preferences.units.water !== 'glasses' ? (
@@ -166,6 +151,7 @@ const Content = ({
   editMode,
   trackingProps,
   canSubmit,
+  openWritingMode,
   onOpenDate,
   onOpenTime,
 }) => (
@@ -222,17 +208,30 @@ const Content = ({
     ) : null}
 
     {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-    <TextInput
-      style={[styles.input, editMode && styles.editInput]}
-      textAlignVertical="top"
-      multiline
-      maxLength={MAX_JOURNAL_LENGTH}
-      value={journalText}
-      placeholder="Write your journal entry here..."
-      placeholderTextColor={colors.textMuted}
-      accessibilityLabel="Journal entry"
-      onChangeText={handleInputChange}
-    />
+    {editMode ? (
+      <TextInput
+        style={[styles.input, styles.editInput]}
+        textAlignVertical="top"
+        multiline
+        maxLength={MAX_JOURNAL_LENGTH}
+        value={journalText}
+        placeholder="Write your journal entry here..."
+        placeholderTextColor={colors.textMuted}
+        accessibilityLabel="Journal entry"
+        onChangeText={handleInputChange}
+      />
+    ) : (
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Open full-screen journal editor"
+        activeOpacity={1}
+        onPress={openWritingMode}
+        style={[styles.input, styles.inputLauncher]}>
+        <Text style={[styles.inputLauncherText, !journalText && styles.inputLauncherPlaceholder]}>
+          {journalText || 'Write your journal entry here...'}
+        </Text>
+      </TouchableOpacity>
+    )}
 
     <View style={editMode ? styles.editMoodCard : styles.newMoodCard}>
       <Text style={[styles.feelingText, editMode && styles.editFeelingText]}>Mood:</Text>
@@ -284,7 +283,7 @@ const Content = ({
 );
 
 // Existing journal-entry screen, restyled. Also used for prompt entries (`prompt`) and editing (`entry`).
-const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
+const JournalEntryScreen = ({route, onClose, onWritingModeChange, prompt, entry}) => {
   const {date} = route.params;
   const [selectedDate, setSelectedDate] = useState(date);
   const activeDate = entry ? date : selectedDate;
@@ -292,6 +291,12 @@ const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
 
   const [moodValue, setMoodValue] = useState(entry ? entry.moodValue : 0);
   const [journalText, setJournalText] = useState(entry ? entry.journal : '');
+  const [writingMode, setWritingMode] = useState(false);
+  const [selection, setSelection] = useState(() => {
+    const end = entry?.journal?.length ?? 0;
+    return {start: end, end};
+  });
+  const writingInputRef = useRef(null);
   const [selectedTime, setSelectedTime] = useState(() => entry ? parse(entry.time, 'hh:mm a', new Date()) : new Date());
   const [timeTouched, setTimeTouched] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -305,12 +310,11 @@ const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [trackingReady, setTrackingReady] = useState(!!entry);
   const [trackingExpanded, setTrackingExpanded] = useState({});
-  const [checkInValues, setCheckInValues] = useState({mood: null, energy: null, stress: null, focus: null});
   const [metricValues, setMetricValues] = useState({water: 0, sleep: 7, exercise: 30, exerciseCategory: 'Walk'});
   const [meal, setMeal] = useState({label: '', category: 'breakfast'});
   const [customMetrics, setCustomMetrics] = useState([]);
   const [customValues, setCustomValues] = useState({});
-  const [trackingTouched, setTrackingTouched] = useState({checkIn: {}, metrics: {}, exercise: false});
+  const [trackingTouched, setTrackingTouched] = useState({metrics: {}});
   const [preferences, setPreferences] = useState(null);
 
   // Unsaved writing is kept on this device (never uploaded) so Back, a crash or a remount cannot lose it.
@@ -326,6 +330,8 @@ const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
       .then(draft => {
         if (!active || !draft || typeof draft.journal !== 'string') return;
         setJournalText(draft.journal);
+        const end = draft.journal.length;
+        setSelection({start: end, end});
         if (draft.moodValue >= 1 && draft.moodValue <= 5) setMoodValue(draft.moodValue);
         setRestored(true);
       })
@@ -343,12 +349,6 @@ const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
     Promise.all([getDaySnapshot(activeDate), getPreferences(), listCustomMetrics()])
       .then(([snapshot, prefs, metrics]) => {
         if (!active) return;
-        setCheckInValues(previous => ({
-          mood: trackingTouched.checkIn.mood ? previous.mood : snapshot.checkIn?.mood ?? null,
-          energy: trackingTouched.checkIn.energy ? previous.energy : ratingSliderValue(snapshot.checkIn?.energy, ratingScaleFor(snapshot.checkIn, 'energy')),
-          stress: trackingTouched.checkIn.stress ? previous.stress : ratingSliderValue(snapshot.checkIn?.stress, ratingScaleFor(snapshot.checkIn, 'stress')),
-          focus: trackingTouched.checkIn.focus ? previous.focus : ratingSliderValue(snapshot.checkIn?.focus, ratingScaleFor(snapshot.checkIn, 'focus')),
-        }));
         setMetricValues(previous => ({
           water: trackingTouched.metrics.water ? previous.water : snapshot.waterGlasses ?? 0,
           sleep: trackingTouched.metrics.sleep ? previous.sleep : snapshot.sleepHours ?? 7,
@@ -434,10 +434,29 @@ const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
     setJournalText(text);
   };
 
-  const setCheckInValue = (field, value) => {
-    setCheckInValues(previous => ({...previous, [field]: value}));
-    setTrackingTouched(previous => ({...previous, checkIn: {...previous.checkIn, [field]: true}}));
+  const openWritingMode = () => {
+    setWritingMode(true);
+    onWritingModeChange?.(true);
   };
+
+  const closeWritingMode = () => {
+    Keyboard.dismiss();
+    setWritingMode(false);
+    onWritingModeChange?.(false);
+  };
+
+  useEffect(() => {
+    if (!writingMode) return undefined;
+    const focusTimer = setTimeout(() => writingInputRef.current?.focus(), 100);
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      closeWritingMode();
+      return true;
+    });
+    return () => {
+      clearTimeout(focusTimer);
+      backHandler.remove();
+    };
+  }, [writingMode]);
 
   const setMetricValue = (metric, patch) => {
     if (metric === 'exercise' && patch.category) {
@@ -472,31 +491,14 @@ const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
     ...customMetricsToSave,
   ];
 
-  const hasTrackingChanges = Object.keys(trackingTouched.checkIn).length > 0
-    || Object.keys(trackingTouched.metrics).length > 0
+  const hasTrackingChanges = Object.keys(trackingTouched.metrics).length > 0
     || meal.label.trim() !== ''
     || customMetricsToSave.length > 0;
-
-  const checkInToSave = () => {
-    const touchedFields = trackingTouched.checkIn;
-    if (!Object.keys(touchedFields).length) return null;
-    const values = {};
-    if (touchedFields.mood) values.mood = checkInValues.mood;
-    ['energy', 'stress', 'focus'].forEach(field => {
-      if (touchedFields[field]) values[field] = checkInValues[field];
-    });
-    const ratingScales = {};
-    ['energy', 'stress', 'focus'].forEach(field => {
-      if (touchedFields[field]) ratingScales[field] = RATING_SCALE_1_10;
-    });
-    return {date: activeDate, ...values, ...(Object.keys(ratingScales).length ? {ratingScales} : {})};
-  };
 
   const trackingProps = {
     expanded: trackingExpanded,
     toggle: toggleTrackingSection,
-    values: {...checkInValues, ...metricValues},
-    setCheckIn: setCheckInValue,
+    values: metricValues,
     setMetric: setMetricValue,
     setMeal: setMealValue,
     meal,
@@ -532,7 +534,6 @@ const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
             journal: journalText,
             prompt,
           } : null,
-          checkIn: checkInToSave(),
           metrics: metricsToSave,
         });
       }
@@ -574,6 +575,7 @@ const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
           notice={restored ? 'Restored your unsaved writing.' : null}
           editMode={!!entry}
           trackingProps={trackingProps}
+          openWritingMode={openWritingMode}
           onOpenDate={() => {
             setPendingDate(activeDate);
             setDatePickerOpen(true);
@@ -585,6 +587,53 @@ const JournalEntryScreen = ({route, onClose, prompt, entry}) => {
               && (journalText.trim() !== '' || (trackingReady && hasTrackingChanges)))}
         />
       </ScrollView>
+      {writingMode && !entry ? (
+      <View style={styles.writingOverlay}>
+        <ImageBackground source={appBackground} resizeMode="cover" style={styles.writingBackground}>
+          <View pointerEvents="none" style={styles.writingVeil} />
+          <SafeAreaView style={styles.writingSafeArea} edges={['top', 'bottom']}>
+            <KeyboardAvoidingView
+              style={styles.writingKeyboard}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+              <View style={styles.writingHeader}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Close writing mode"
+                  onPress={closeWritingMode}
+                  style={styles.writingCloseButton}>
+                  <MaterialCommunityIcons name="arrow-left" size={24} color={colors.primaryDeep} />
+                </TouchableOpacity>
+                <Text style={styles.writingTitle}>New entry</Text>
+                <Button title="Done" onPress={closeWritingMode} style={styles.writingDoneButton} />
+              </View>
+              <ScrollView
+                style={styles.writingScroll}
+                contentContainerStyle={styles.writingScrollContent}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
+                <TextInput
+                  ref={writingInputRef}
+                  style={styles.writingInput}
+                  textAlignVertical="top"
+                  multiline
+                  showSoftInputOnFocus={true}
+                  maxLength={MAX_JOURNAL_LENGTH}
+                  value={journalText}
+                  selection={selection}
+                  onSelectionChange={event => setSelection(event.nativeEvent.selection)}
+                  placeholder="Write your journal entry here..."
+                  placeholderTextColor={colors.textMuted}
+                  accessibilityLabel="Journal entry"
+                  onChangeText={handleInputChange}
+                  blurOnSubmit={false}
+                  scrollEnabled
+                />
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </SafeAreaView>
+        </ImageBackground>
+      </View>
+      ) : null}
       <Modal visible={datePickerOpen && !entry} transparent animationType="fade" onRequestClose={() => setDatePickerOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.pickerCard}>
@@ -675,6 +724,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
   },
+  inputLauncher: {overflow: 'hidden'},
+  inputLauncherText: {flex: 1, width: '100%', padding: 0, color: editColors.ink, fontSize: 17, lineHeight: 25},
+  inputLauncherPlaceholder: {color: colors.textMuted},
   feelingText: {fontSize: 18, fontWeight: 'bold', color: colors.primary, marginBottom: space.sm},
   iconButtonContainer: {flexDirection: 'row', justifyContent: 'space-between'},
   iconButton: {
@@ -809,6 +861,31 @@ const styles = StyleSheet.create({
   timeSteppers: {gap: space.sm},
   timeStepper: {width: '100%'},
   periodChoices: {flexDirection: 'row', justifyContent: 'center', marginTop: space.sm},
+  writingOverlay: {...StyleSheet.absoluteFillObject, zIndex: 20, elevation: 20},
+  writingBackground: {flex: 1},
+  writingVeil: {...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.70)'},
+  writingSafeArea: {flex: 1},
+  writingKeyboard: {flex: 1},
+  writingHeader: {minHeight: 60, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, gap: space.md},
+  writingCloseButton: {width: MIN_TOUCH, height: MIN_TOUCH, borderRadius: MIN_TOUCH / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(245,43,203,0.10)'},
+  writingTitle: {flex: 1, color: editColors.ink, fontSize: 20, fontWeight: '700'},
+  writingDoneButton: {minWidth: 92},
+  writingScroll: {flex: 1},
+  writingScrollContent: {flexGrow: 1, padding: space.lg, paddingBottom: space.xl},
+  writingInput: {
+    flex: 1,
+    minHeight: 280,
+    width: '100%',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#E9DDF4',
+    backgroundColor: '#FFFFFF',
+    color: editColors.ink,
+    fontSize: 18,
+    lineHeight: 27,
+    padding: space.lg,
+    textAlignVertical: 'top',
+  },
   trackingSections: {marginBottom: space.sm},
   trackingCard: {
     padding: space.md,
@@ -827,7 +904,6 @@ const styles = StyleSheet.create({
   trackingSectionTitle: {color: editColors.ink, fontSize: 16, fontWeight: '700'},
   trackingSectionDescription: {color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: 2},
   trackingSectionBody: {paddingTop: space.md},
-  trackingInputGroup: {marginTop: space.md},
   trackingChips: {flexDirection: 'row', flexWrap: 'wrap'},
   trackingEquiv: {color: editColors.muted, textAlign: 'center', marginTop: space.sm, fontSize: 14},
   customMetricGroup: {paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: '#F0DDF0'},
